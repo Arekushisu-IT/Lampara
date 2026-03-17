@@ -6,6 +6,7 @@ require('dotenv').config();
 const pool = require('./db');
 const authRoutes = require('./routes/auth');
 const logsRoutes = require('./routes/logs');
+
 const app = express();
 const PORT = process.env.PORT || 8080;
 
@@ -13,11 +14,9 @@ const PORT = process.env.PORT || 8080;
 // MIDDLEWARE
 // ============================================================
 
-// Body parser
 app.use(bodyParser.json({ limit: '50mb' }));
 app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
 
-// CORS - Allow frontend to connect
 app.use(cors({
   origin: [
     'http://localhost:3000',
@@ -36,7 +35,7 @@ app.use(cors({
 // ROUTES
 // ============================================================
 
-// Health check endpoint
+// Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'healthy', timestamp: new Date().toISOString() });
 });
@@ -47,39 +46,29 @@ app.use('/api/auth', authRoutes);
 // Logs routes
 app.use('/api/logs', logsRoutes);
 
-// Players routes (placeholder)
-app.get('/api/players', (req, res) => {
+// Players routes
+app.get('/api/players', async (req, res) => {
   try {
-    pool.query('SELECT * FROM players LIMIT 100', (err, results) => {
-      if (err) {
-        console.error('Players query error:', err);
-        return res.status(500).json({ error: 'Failed to fetch players' });
-      }
-      res.json(results);
-    });
+    const [players] = await pool.query('SELECT * FROM players LIMIT 100');
+    res.json(players);
   } catch (err) {
     console.error('Players error:', err);
     res.status(500).json({ error: 'Failed to fetch players' });
   }
 });
 
-// Quests routes (placeholder)
-app.get('/api/quests', (req, res) => {
+// Quests routes
+app.get('/api/quests', async (req, res) => {
   try {
-    pool.query('SELECT * FROM quests LIMIT 100', (err, results) => {
-      if (err) {
-        console.error('Quests query error:', err);
-        return res.status(500).json({ error: 'Failed to fetch quests' });
-      }
-      res.json(results);
-    });
+    const [quests] = await pool.query('SELECT * FROM quests LIMIT 100');
+    res.json(quests);
   } catch (err) {
     console.error('Quests error:', err);
     res.status(500).json({ error: 'Failed to fetch quests' });
   }
 });
 
-// Root endpoint
+// Root
 app.get('/', (req, res) => {
   res.json({
     message: 'LAMPARA Backend API',
@@ -88,8 +77,7 @@ app.get('/', (req, res) => {
       health: '/api/health',
       auth: {
         login: 'POST /api/auth/login',
-        me: 'GET /api/auth/me',
-        register: 'POST /api/auth/register'
+        me: 'GET /api/auth/me'
       },
       data: {
         players: 'GET /api/players',
@@ -100,7 +88,7 @@ app.get('/', (req, res) => {
   });
 });
 
-// 404 handler
+// 404
 app.use((req, res) => {
   res.status(404).json({
     error: 'Endpoint not found',
@@ -110,24 +98,27 @@ app.use((req, res) => {
 });
 
 // ============================================================
-// SERVER START
+// START SERVER
 // ============================================================
 
-// Check database connection on startup
-pool.query('SELECT 1', (err) => {
-  if (err) {
-    console.error('✗ Database Connection Error:', err.message);
-  } else {
+async function startServer() {
+  try {
+    // Test database connection
+    await pool.query('SELECT 1');
     console.log('✓ MySQL Database Connected Successfully');
+  } catch (err) {
+    console.error('✗ Database Connection Error:', err.message);
   }
-});
 
-app.listen(PORT, () => {
-  console.log('✓ LAMPARA Backend server running on port ' + PORT);
-  console.log('✓ Environment: ' + process.env.NODE_ENV);
-  console.log('✓ API Documentation:');
-  console.log('  - Health Check: http://localhost:' + PORT + '/api/health');
-  console.log('  - API Root: http://localhost:' + PORT + '/');
-});
+  app.listen(PORT, () => {
+    console.log('✓ LAMPARA Backend server running on port ' + PORT);
+    console.log('✓ Environment: ' + process.env.NODE_ENV);
+    console.log('✓ API Documentation:');
+    console.log('  - Health Check: http://localhost:' + PORT + '/api/health');
+    console.log('  - API Root: http://localhost:' + PORT + '/');
+  });
+}
+
+startServer();
 
 module.exports = app;
