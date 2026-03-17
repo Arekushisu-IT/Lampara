@@ -3,86 +3,132 @@ const cors = require('cors');
 const bodyParser = require('body-parser');
 require('dotenv').config();
 
-const app = express();
-const PORT = process.env.PORT || 5000;
+const pool = require('./db');
+const authRoutes = require('./auth');
+const logsRoutes = require('./logs');
 
-// Middleware
+const app = express();
+const PORT = process.env.PORT || 8080;
+
+// ============================================================
+// MIDDLEWARE
+// ============================================================
+
+// Body parser
+app.use(bodyParser.json({ limit: '50mb' }));
+app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
+
+// CORS - Allow frontend to connect
 app.use(cors({
   origin: [
     'http://localhost:3000',
     'http://localhost',
     'http://127.0.0.1:5500',
     'file://',
-    process.env.FRONTEND_URL,
-    process.env.FRONTEND_URL_PROD
+    process.env.FRONTEND_URL || 'http://localhost:3000',
+    process.env.FRONTEND_URL_PROD || 'https://yourdomain.com'
   ],
-  credentials: true
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
-
-// Import routes
-const authRoutes = require('./routes/auth');
-const playerRoutes = require('./routes/players');
-const questRoutes = require('./routes/quests');
-const logRoutes = require('./routes/logs');
-
-// Use routes
-app.use('/api/auth', authRoutes);
-app.use('/api/players', playerRoutes);
-app.use('/api/quests', questRoutes);
-app.use('/api/logs', logRoutes);
+// ============================================================
+// ROUTES
+// ============================================================
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
-  res.json({ 
-    status: 'online',
-    message: 'LAMPARA Backend is running',
-    timestamp: new Date().toISOString()
-  });
+  res.json({ status: 'healthy', timestamp: new Date().toISOString() });
+});
+
+// Auth routes
+app.use('/api/auth', authRoutes);
+
+// Logs routes
+app.use('/api/logs', logsRoutes);
+
+// Players routes (placeholder)
+app.get('/api/players', (req, res) => {
+  try {
+    pool.query('SELECT * FROM players LIMIT 100', (err, results) => {
+      if (err) {
+        console.error('Players query error:', err);
+        return res.status(500).json({ error: 'Failed to fetch players' });
+      }
+      res.json(results);
+    });
+  } catch (err) {
+    console.error('Players error:', err);
+    res.status(500).json({ error: 'Failed to fetch players' });
+  }
+});
+
+// Quests routes (placeholder)
+app.get('/api/quests', (req, res) => {
+  try {
+    pool.query('SELECT * FROM quests LIMIT 100', (err, results) => {
+      if (err) {
+        console.error('Quests query error:', err);
+        return res.status(500).json({ error: 'Failed to fetch quests' });
+      }
+      res.json(results);
+    });
+  } catch (err) {
+    console.error('Quests error:', err);
+    res.status(500).json({ error: 'Failed to fetch quests' });
+  }
 });
 
 // Root endpoint
 app.get('/', (req, res) => {
-  res.json({ 
-    message: 'LAMPARA Admin Panel API',
+  res.json({
+    message: 'LAMPARA Backend API',
     version: '1.0.0',
     endpoints: {
-      auth: '/api/auth',
-      players: '/api/players',
-      quests: '/api/quests',
-      logs: '/api/logs',
-      health: '/api/health'
+      health: '/api/health',
+      auth: {
+        login: 'POST /api/auth/login',
+        me: 'GET /api/auth/me',
+        register: 'POST /api/auth/register'
+      },
+      data: {
+        players: 'GET /api/players',
+        quests: 'GET /api/quests',
+        logs: 'GET /api/logs'
+      }
     }
   });
 });
 
 // 404 handler
 app.use((req, res) => {
-  res.status(404).json({ 
+  res.status(404).json({
     error: 'Endpoint not found',
-    path: req.path 
+    path: req.path,
+    method: req.method
   });
 });
 
-// Error handling middleware
-app.use((err, req, res, next) => {
-  console.error('Error:', err.message);
-  res.status(err.status || 500).json({ 
-    error: err.message || 'Internal server error'
-  });
+// ============================================================
+// SERVER START
+// ============================================================
+
+// Check database connection on startup
+pool.query('SELECT 1', (err) => {
+  if (err) {
+    console.error('✗ Database Connection Error:', err.message);
+  } else {
+    console.log('✓ MySQL Database Connected Successfully');
+  }
 });
 
-// Start server
 app.listen(PORT, () => {
-  console.log(`\n✓ LAMPARA Backend server running on port ${PORT}`);
-  console.log(`✓ Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`✓ API Documentation:`);
-  console.log(`  - Health Check: http://localhost:${PORT}/api/health`);
-  console.log(`  - API Root: http://localhost:${PORT}/\n`);
+  console.log('✓ LAMPARA Backend server running on port ' + PORT);
+  console.log('✓ Environment: ' + process.env.NODE_ENV);
+  console.log('✓ API Documentation:');
+  console.log('  - Health Check: http://localhost:' + PORT + '/api/health');
+  console.log('  - API Root: http://localhost:' + PORT + '/');
 });
 
 module.exports = app;
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
