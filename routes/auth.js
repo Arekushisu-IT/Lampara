@@ -178,3 +178,34 @@ router.post('/register', async (req, res) => {
 });
 
 module.exports = router;
+
+/**
+ * POST /api/auth/player-register
+ * (For Unity Game - Students applying for an account)
+ */
+router.post('/player-register', async (req, res) => {
+  try {
+    const { name, email } = req.body;
+
+    if (!name || !email) {
+      return res.status(400).json({ error: 'Name and Student ID / Email are required' });
+    }
+
+    // 1. Check if this student ID is already registered
+    const [existing] = await pool.query('SELECT id FROM players WHERE email = ?', [email]);
+    if (existing.length > 0) {
+      return res.status(400).json({ error: 'This Student ID is already registered.' });
+    }
+
+    // 2. Insert the new player with an "inactive" status (Pending Approval)
+    await pool.query(
+      'INSERT INTO players (name, email, level, experience, status) VALUES (?, ?, 1, 0, "inactive")',
+      [name, email]
+    );
+
+    res.status(201).json({ message: 'Registration submitted! Please wait for your teacher to approve it.' });
+  } catch (err) {
+    console.error('Player registration error:', err);
+    res.status(500).json({ error: 'Registration failed' });
+  }
+});
