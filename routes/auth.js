@@ -65,7 +65,7 @@ router.post('/login', async (req, res) => {
  */
 router.post('/player-login', async (req, res) => {
   try {
-    const { username, password } = req.body; // Changed from email to username
+    const { username, password } = req.body; 
 
     if (!username || !password) {
       return res.status(400).json({ error: 'Username (Student ID) and Password are required' });
@@ -100,11 +100,12 @@ router.post('/player-login', async (req, res) => {
     const token = jwt.sign(
       { id: player.id, username: player.username, role: 'player' },
       process.env.JWT_SECRET || 'dev-secret-key',
-      { expiresIn: '30d' } // Players stay logged in for 30 days
+      { expiresIn: '30d' } 
     );
 
-    // Update their last_login timestamp in the database
-    await pool.query('UPDATE players SET last_login = CURRENT_TIMESTAMP WHERE id = ?', [player.id]);
+    // ✨ THE ONLINE SWITCH ✨
+    // Update last_login timestamp AND set them to online!
+    await pool.query('UPDATE players SET last_login = CURRENT_TIMESTAMP, is_online = true WHERE id = ?', [player.id]);
 
     return res.json({
       message: 'Login successful',
@@ -138,9 +139,7 @@ router.get('/me', async (req, res) => {
     const token = authHeader.substring(7);
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'dev-secret-key');
 
-    // Check if it's a player or an admin asking for their profile
     if (decoded.role === 'player') {
-      // Updated query to fetch username and school instead of email
       const [players] = await pool.query('SELECT id, username, name, school, level, experience, status FROM players WHERE id = ?', [decoded.id]);
       if (players.length === 0) return res.status(401).json({ error: 'Player not found' });
       return res.json({ user: players[0] });
@@ -203,16 +202,14 @@ router.post('/player-register', async (req, res) => {
       return res.status(400).json({ error: 'Name, Username, and Password are required' });
     }
 
-    // 1. Check if this username/student ID is already registered
     const [existing] = await pool.query('SELECT id FROM players WHERE username = ?', [username]);
     if (existing.length > 0) {
       return res.status(400).json({ error: 'This Username is already registered.' });
     }
 
-    // 2. Hash the password
     const hashedPassword = await bcryptjs.hash(password, 10);
 
-    // 3. Insert the new player with an "inactive" status (Pending Approval)
+    // Keep "inactive" here because it means "Waiting for teacher approval"
     await pool.query(
       'INSERT INTO players (name, username, password, school, level, experience, status) VALUES (?, ?, ?, ?, 1, 0, "inactive")',
       [name, username, hashedPassword, school || null]
@@ -222,6 +219,28 @@ router.post('/player-register', async (req, res) => {
   } catch (err) {
     console.error('Player registration error:', err);
     res.status(500).json({ error: 'Registration failed' });
+  }
+});
+
+/**
+ * POST /api/auth/player-logout
+ * ✨ NEW: The safe way to log out!
+ */
+router.post('/player-logout', async (req, res) => {
+  try {
+    const { id } = req.body;
+    
+    if (!id) {
+      return res.status(400).json({ error: 'Player ID required' });
+    }
+
+    // Only switch "is_online" to false. Do NOT touch their approval status!
+    await pool.query('UPDATE players SET is_online = false WHERE id = ?', [id]);
+    
+    res.json({ message: 'Logged out successfully' });
+  } catch (err) {
+    console.error('Logout error:', err);
+    res.status(500).json({ error: 'Logout failed' });
   }
 });
 
