@@ -111,6 +111,29 @@ async function startServer() {
     // Test database connection
     await pool.query('SELECT 1');
     console.log('✓ MySQL Database Connected Successfully');
+
+    // Ensure essential tables exist; if not, attempt to initialize schema
+    try {
+      const [rows] = await pool.query("SHOW TABLES LIKE 'users'");
+      if (!rows || rows.length === 0) {
+        console.warn('⚠ Required tables not found. Running database initializer...');
+        const { exec } = require('child_process');
+        const path = require('path');
+        const initScript = path.join(__dirname, 'init-db-deploy.js');
+
+        exec(`node "${initScript}"`, { cwd: __dirname }, (err, stdout, stderr) => {
+          if (err) {
+            console.error('✗ Database initializer failed:', err.message);
+            if (stderr) console.error(stderr);
+            return;
+          }
+          console.log(stdout);
+          console.log('✓ Database initialized by init-db-deploy.js');
+        });
+      }
+    } catch (checkErr) {
+      console.warn('Could not verify tables:', checkErr.message);
+    }
   } catch (err) {
     console.error('✗ Database Connection Error:', err.message);
   }
