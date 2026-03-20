@@ -26,6 +26,12 @@ router.post('/login', async (req, res) => {
 
     const user = users[0];
 
+    // Ensure user has a stored password hash before comparing
+    if (!user.password) {
+      console.error('User record missing password hash for id', user.id);
+      return res.status(500).json({ error: 'Login failed' });
+    }
+
     // Compare password
     const passwordMatch = await bcryptjs.compare(password, user.password);
 
