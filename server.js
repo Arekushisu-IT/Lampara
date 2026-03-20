@@ -6,8 +6,6 @@ require('dotenv').config();
 const pool = require('./db');
 const authRoutes = require('./routes/auth');
 const logsRoutes = require('./routes/logs');
-const playersRoutes = require('./routes/players');
-const questsRoutes = require('./routes/quests');
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -48,11 +46,27 @@ app.use('/api/auth', authRoutes);
 // Logs routes
 app.use('/api/logs', logsRoutes);
 
-// Players routes (FIXED - now includes PUT for approvals!)
-app.use('/api/players', playersRoutes);
+// Players routes
+app.get('/api/players', async (req, res) => {
+  try {
+    const [players] = await pool.query('SELECT * FROM players LIMIT 100');
+    res.json(players);
+  } catch (err) {
+    console.error('Players error:', err);
+    res.status(500).json({ error: 'Failed to fetch players' });
+  }
+});
 
 // Quests routes
-app.use('/api/quests', questsRoutes);
+app.get('/api/quests', async (req, res) => {
+  try {
+    const [quests] = await pool.query('SELECT * FROM quests LIMIT 100');
+    res.json(quests);
+  } catch (err) {
+    console.error('Quests error:', err);
+    res.status(500).json({ error: 'Failed to fetch quests' });
+  }
+});
 
 // Root
 app.get('/', (req, res) => {
@@ -63,30 +77,12 @@ app.get('/', (req, res) => {
       health: '/api/health',
       auth: {
         login: 'POST /api/auth/login',
-        register: 'POST /api/auth/register',
-        me: 'GET /api/auth/me',
-        playerLogin: 'POST /api/auth/player-login',
-        playerRegister: 'POST /api/auth/player-register'
+        me: 'GET /api/auth/me'
       },
       data: {
-        players: {
-          getAll: 'GET /api/players',
-          getById: 'GET /api/players/:id',
-          create: 'POST /api/players',
-          update: 'PUT /api/players/:id',
-          delete: 'DELETE /api/players/:id'
-        },
-        quests: {
-          getAll: 'GET /api/quests',
-          getById: 'GET /api/quests/:id',
-          create: 'POST /api/quests',
-          update: 'PUT /api/quests/:id',
-          delete: 'DELETE /api/quests/:id'
-        },
-        logs: {
-          getAll: 'GET /api/logs',
-          create: 'POST /api/logs'
-        }
+        players: 'GET /api/players',
+        quests: 'GET /api/quests',
+        logs: 'GET /api/logs'
       }
     }
   });
@@ -97,8 +93,7 @@ app.use((req, res) => {
   res.status(404).json({
     error: 'Endpoint not found',
     path: req.path,
-    method: req.method,
-    availableEndpoints: 'GET /'
+    method: req.method
   });
 });
 
@@ -121,7 +116,6 @@ async function startServer() {
     console.log('✓ API Documentation:');
     console.log('  - Health Check: http://localhost:' + PORT + '/api/health');
     console.log('  - API Root: http://localhost:' + PORT + '/');
-    console.log('✓ Ready to accept student approvals!');
   });
 }
 
