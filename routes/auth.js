@@ -80,7 +80,12 @@ router.post('/player-login', async (req, res) => {
 
     const player = players[0];
 
-    // Block suspended/banned players from entering the game
+    // 1. Block PENDING (inactive) players from entering
+    if (player.status === 'inactive' || player.status === 'pending') {
+      return res.status(403).json({ error: 'Your account is pending. Please wait for your teacher to approve it.' });
+    }
+
+    // 2. Block SUSPENDED/BANNED players
     if (player.status === 'banned' || player.status === 'suspended') {
       return res.status(403).json({ error: 'Your account has been suspended. Please see your teacher.' });
     }
@@ -177,8 +182,6 @@ router.post('/register', async (req, res) => {
   }
 });
 
-module.exports = router;
-
 /**
  * POST /api/auth/player-register
  * (For Unity Game - Students applying for an account)
@@ -209,3 +212,6 @@ router.post('/player-register', async (req, res) => {
     res.status(500).json({ error: 'Registration failed' });
   }
 });
+
+// module.exports must ALWAYS be at the very bottom!
+module.exports = router;
