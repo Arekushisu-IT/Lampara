@@ -7,6 +7,7 @@ const router = express.Router();
 
 /**
  * POST /api/auth/login
+ * (For Admins and Staff - Requires Password)
  */
 router.post('/login', async (req, res) => {
   try {
@@ -59,6 +60,60 @@ router.post('/login', async (req, res) => {
 });
 
 /**
+ * POST /api/auth/player-login
+ * (For Unity Game - Requires ONLY Email/Student ID)
+ */
+router.post('/player-login', async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ error: 'Student ID / Email is required' });
+    }
+
+    // Check if player exists in the players table
+    const [players] = await pool.query('SELECT * FROM players WHERE email = ?', [email]);
+
+    if (players.length === 0) {
+      return res.status(401).json({ error: 'Player account not found. Please ask your teacher to register you.' });
+    }
+
+    const player = players[0];
+
+    // Block suspended/banned players from entering the game
+    if (player.status === 'banned' || player.status === 'suspended') {
+      return res.status(403).json({ error: 'Your account has been suspended. Please see your teacher.' });
+    }
+
+    // Generate JWT for the player
+    const token = jwt.sign(
+      { id: player.id, email: player.email, role: 'player' },
+      process.env.JWT_SECRET || 'dev-secret-key',
+      { expiresIn: '30d' } // Players stay logged in for 30 days
+    );
+
+    // Update their last_login timestamp in the database
+    await pool.query('UPDATE players SET last_login = CURRENT_TIMESTAMP WHERE id = ?', [player.id]);
+
+    return res.json({
+      message: 'Login successful',
+      token,
+      player: {
+        id: player.id,
+        name: player.name,
+        email: player.email,
+        level: player.level,
+        experience: player.experience,
+        status: player.status
+      }
+    });
+  } catch (err) {
+    console.error('Player login error:', err);
+    res.status(500).json({ error: 'Login failed' });
+  }
+});
+
+/**
  * GET /api/auth/me
  */
 router.get('/me', async (req, res) => {
@@ -69,30 +124,25 @@ router.get('/me', async (req, res) => {
     }
 
     const token = authHeader.substring(7);
-
-    // Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'dev-secret-key');
 
-    // Get user
-    const [users] = await pool.query('SELECT id, email, name, role, status FROM users WHERE id = ?', [decoded.id]);
-
-    if (users.length === 0) {
-      return res.status(401).json({ error: 'User not found' });
+    // Check if it's a player or an admin asking for their profile
+    if (decoded.role === 'player') {
+      const [players] = await pool.query('SELECT id, email, name, level, experience, status FROM players WHERE id = ?', [decoded.id]);
+      if (players.length === 0) return res.status(401).json({ error: 'Player not found' });
+      return res.json({ user: players[0] });
+    } else {
+      const [users] = await pool.query('SELECT id, email, name, role, status FROM users WHERE id = ?', [decoded.id]);
+      if (users.length === 0) return res.status(401).json({ error: 'User not found' });
+      
+      const user = users[0];
+      return res.json({
+        user: {
+          id: user.id, email: user.email, name: user.name, role: user.role, status: user.status,
+          av: '#7c5c1a', ac: '#d4af37', ini: user.name.charAt(0).toUpperCase()
+        }
+      });
     }
-
-    const user = users[0];
-    return res.json({
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        role: user.role,
-        status: user.status,
-        av: '#7c5c1a',
-        ac: '#d4af37',
-        ini: user.name.charAt(0).toUpperCase()
-      }
-    });
   } catch (err) {
     console.error('Auth me error:', err);
     res.status(401).json({ error: 'Invalid or expired token' });
@@ -110,10 +160,8 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ error: 'Email, password, and name required' });
     }
 
-    // Hash password
     const hashedPassword = await bcryptjs.hash(password, 10);
 
-    // Insert user
     await pool.query(
       'INSERT INTO users (email, password, name, role, status) VALUES (?, ?, ?, ?, ?)',
       [email, hashedPassword, name, role || 'staff', 'active']
