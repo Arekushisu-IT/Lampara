@@ -7,7 +7,7 @@ const router = express.Router();
 
 /**
  * POST /api/auth/login
- * (For Admins and Staff - Requires Password)
+ * (For Admins and Staff - Requires Email & Password)
  */
 router.post('/login', async (req, res) => {
   try {
@@ -61,24 +61,30 @@ router.post('/login', async (req, res) => {
 
 /**
  * POST /api/auth/player-login
- * (For Unity Game - Requires ONLY Email/Student ID)
+ * (For Unity Game - Requires Username and Password)
  */
 router.post('/player-login', async (req, res) => {
   try {
-    const { email } = req.body;
+    const { username, password } = req.body; // Changed from email to username
 
-    if (!email) {
-      return res.status(400).json({ error: 'Student ID / Email is required' });
+    if (!username || !password) {
+      return res.status(400).json({ error: 'Username (Student ID) and Password are required' });
     }
 
     // Check if player exists in the players table
-    const [players] = await pool.query('SELECT * FROM players WHERE email = ?', [email]);
+    const [players] = await pool.query('SELECT * FROM players WHERE username = ?', [username]);
 
     if (players.length === 0) {
       return res.status(401).json({ error: 'Player account not found. Please ask your teacher to register you.' });
     }
 
     const player = players[0];
+
+    // Verify Password using bcrypt
+    const passwordMatch = await bcryptjs.compare(password, player.password);
+    if (!passwordMatch) {
+      return res.status(401).json({ error: 'Invalid Username or Password.' });
+    }
 
     // 1. Block PENDING (inactive) players from entering
     if (player.status === 'inactive' || player.status === 'pending') {
@@ -92,7 +98,7 @@ router.post('/player-login', async (req, res) => {
 
     // Generate JWT for the player
     const token = jwt.sign(
-      { id: player.id, email: player.email, role: 'player' },
+      { id: player.id, username: player.username, role: 'player' },
       process.env.JWT_SECRET || 'dev-secret-key',
       { expiresIn: '30d' } // Players stay logged in for 30 days
     );
@@ -106,7 +112,8 @@ router.post('/player-login', async (req, res) => {
       player: {
         id: player.id,
         name: player.name,
-        email: player.email,
+        username: player.username,
+        school: player.school,
         level: player.level,
         experience: player.experience,
         status: player.status
@@ -133,7 +140,8 @@ router.get('/me', async (req, res) => {
 
     // Check if it's a player or an admin asking for their profile
     if (decoded.role === 'player') {
-      const [players] = await pool.query('SELECT id, email, name, level, experience, status FROM players WHERE id = ?', [decoded.id]);
+      // Updated query to fetch username and school instead of email
+      const [players] = await pool.query('SELECT id, username, name, school, level, experience, status FROM players WHERE id = ?', [decoded.id]);
       if (players.length === 0) return res.status(401).json({ error: 'Player not found' });
       return res.json({ user: players[0] });
     } else {
@@ -156,6 +164,7 @@ router.get('/me', async (req, res) => {
 
 /**
  * POST /api/auth/register
+ * (For Admins and Staff)
  */
 router.post('/register', async (req, res) => {
   try {
@@ -188,22 +197,25 @@ router.post('/register', async (req, res) => {
  */
 router.post('/player-register', async (req, res) => {
   try {
-    const { name, email } = req.body;
+    const { name, username, password, school } = req.body;
 
-    if (!name || !email) {
-      return res.status(400).json({ error: 'Name and Student ID / Email are required' });
+    if (!name || !username || !password) {
+      return res.status(400).json({ error: 'Name, Username, and Password are required' });
     }
 
-    // 1. Check if this student ID is already registered
-    const [existing] = await pool.query('SELECT id FROM players WHERE email = ?', [email]);
+    // 1. Check if this username/student ID is already registered
+    const [existing] = await pool.query('SELECT id FROM players WHERE username = ?', [username]);
     if (existing.length > 0) {
-      return res.status(400).json({ error: 'This Student ID is already registered.' });
+      return res.status(400).json({ error: 'This Username is already registered.' });
     }
 
-    // 2. Insert the new player with an "inactive" status (Pending Approval)
+    // 2. Hash the password
+    const hashedPassword = await bcryptjs.hash(password, 10);
+
+    // 3. Insert the new player with an "inactive" status (Pending Approval)
     await pool.query(
-      'INSERT INTO players (name, email, level, experience, status) VALUES (?, ?, 1, 0, "inactive")',
-      [name, email]
+      'INSERT INTO players (name, username, password, school, level, experience, status) VALUES (?, ?, ?, ?, 1, 0, "inactive")',
+      [name, username, hashedPassword, school || null]
     );
 
     res.status(201).json({ message: 'Registration submitted! Please wait for your teacher to approve it.' });
