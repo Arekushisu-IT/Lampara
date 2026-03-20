@@ -11,6 +11,16 @@ const router = express.Router();
  */
 router.post('/login', async (req, res) => {
   try {
+    // Conditional verbose logging for debugging (set AUTH_VERBOSE_LOG=true in env)
+    const authVerbose = String(process.env.AUTH_VERBOSE_LOG || '').toLowerCase() === 'true';
+    if (authVerbose) {
+      const masked = Object.assign({}, req.body);
+      if (masked.password) masked.password = `[REDACTED length=${String(masked.password).length}]`;
+      console.log('[AUTH] Incoming request:', req.method, req.originalUrl);
+      console.log('[AUTH] Payload:', masked);
+      console.log('[AUTH] Remote IP:', req.headers['x-forwarded-for'] || req.ip || req.connection && req.connection.remoteAddress);
+      console.log('[AUTH] UA:', req.headers['user-agent'] || 'n/a');
+    }
     const { email, password } = req.body;
 
     if (!email || !password) {
@@ -71,6 +81,15 @@ router.post('/login', async (req, res) => {
  */
 router.post('/player-login', async (req, res) => {
   try {
+    const authVerbose = String(process.env.AUTH_VERBOSE_LOG || '').toLowerCase() === 'true';
+    if (authVerbose) {
+      const masked = Object.assign({}, req.body);
+      if (masked.password) masked.password = `[REDACTED length=${String(masked.password).length}]`;
+      console.log('[AUTH] Incoming request:', req.method, req.originalUrl);
+      console.log('[AUTH] Payload:', masked);
+      console.log('[AUTH] Remote IP:', req.headers['x-forwarded-for'] || req.ip || req.connection && req.connection.remoteAddress);
+      console.log('[AUTH] UA:', req.headers['user-agent'] || 'n/a');
+    }
     const { username, password } = req.body; // Changed from email to username
 
     if (!username || !password) {

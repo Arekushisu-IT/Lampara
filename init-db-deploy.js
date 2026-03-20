@@ -29,12 +29,23 @@ async function initializeDatabase() {
 
     const sqlContent = fs.readFileSync(sqlPath, 'utf8');
 
-    // Execute all SQL statements at once (multipleStatements: true)
-    await connection.query(sqlContent);
+    // Execute SQL statements sequentially and continue on errors
+    const statements = sqlContent
+      .split(/;\s*\n/) // split on semicolon + newline to keep multi-line statements together
+      .map(s => s.trim())
+      .filter(s => s.length > 0);
 
-    console.log('✓ Database schema initialized successfully');
-    console.log('✓ Tables created');
-    console.log('✓ Demo data inserted');
+    for (const stmt of statements) {
+      try {
+        await connection.query(stmt);
+      } catch (stmtErr) {
+        console.warn('⚠ SQL statement failed (continuing):', stmtErr.message);
+        console.warn('  Failed statement preview:', stmt.slice(0, 200).replace(/\n/g, ' '));
+        // continue with next statement
+      }
+    }
+
+    console.log('✓ Database schema initialization attempted (errors logged above if any)');
 
     await connection.end();
     console.log('\n✓ Database initialization complete!\n');
