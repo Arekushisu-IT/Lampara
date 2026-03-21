@@ -1,6 +1,6 @@
 const bcryptjs = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const pool = require('../../db'); // Backs out twice to find your db.js
+const pool = require('../../db'); 
 
 // ==========================================
 // ADMIN & STAFF LOGIN
@@ -47,8 +47,6 @@ const playerLogin = async (req, res) => {
     const player = players[0];
     const passwordMatch = await bcryptjs.compare(password, player.password);
     if (!passwordMatch) return res.status(401).json({ error: 'Invalid Username or Password.' });
-
-    // NOTE: The 'pending/inactive' block has been removed here so anyone can log in immediately.
 
     if (player.status === 'banned' || player.status === 'suspended') {
       return res.status(403).json({ error: 'Your account has been suspended.' });
@@ -142,7 +140,7 @@ const playerRegister = async (req, res) => {
 
     const hashedPassword = await bcryptjs.hash(password, 10);
     
-    // NOTE: Changed default status from "inactive" to "active" so they are verified immediately
+    // Default to active so they can play immediately
     await pool.query('INSERT INTO players (name, username, password, school, level, experience, status, chapter, suspicion) VALUES (?, ?, ?, ?, 1, 0, "active", 1, 0)', [name, username, hashedPassword, school || null]);
     
     res.status(201).json({ message: 'Registration submitted! You can now log in.' });
@@ -152,4 +150,30 @@ const playerRegister = async (req, res) => {
   }
 };
 
-module.exports = { adminLogin, playerLogin, playerLogout, getMe, adminRegister, playerRegister };
+// ==========================================
+// ADMIN: UPDATE PLAYER STATUS
+// ==========================================
+const updatePlayerStatus = async (req, res) => {
+  try {
+    const { id, status } = req.body; 
+
+    if (!id || !status) {
+      return res.status(400).json({ error: 'Player ID and new status are required' });
+    }
+
+    // Update the database
+    await pool.query('UPDATE players SET status = ? WHERE id = ?', [status, id]);
+
+    // Extra Security: Force offline if suspended
+    if (status === 'suspended') {
+      await pool.query('UPDATE players SET is_online = false WHERE id = ?', [id]);
+    }
+
+    res.json({ message: `Player successfully marked as ${status}` });
+  } catch (err) {
+    console.error('Status update error:', err);
+    res.status(500).json({ error: 'Failed to update player status' });
+  }
+};
+
+module.exports = { adminLogin, playerLogin, playerLogout, getMe, adminRegister, playerRegister, updatePlayerStatus };
