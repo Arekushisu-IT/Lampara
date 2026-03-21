@@ -140,8 +140,8 @@ const playerRegister = async (req, res) => {
 
     const hashedPassword = await bcryptjs.hash(password, 10);
     
-    // CHANGED: Status defaults to "pending" so admins must approve them
-    await pool.query('INSERT INTO players (name, username, password, school, level, experience, status, chapter, suspicion) VALUES (?, ?, ?, ?, 1, 0, "pending", 1, 0)', [name, username, hashedPassword, school || null]);
+    // FIXED: Changed "pending" back to "inactive" so your database accepts it!
+    await pool.query('INSERT INTO players (name, username, password, school, level, experience, status, chapter, suspicion) VALUES (?, ?, ?, ?, 1, 0, "inactive", 1, 0)', [name, username, hashedPassword, school || null]);
     
     res.status(201).json({ message: 'Registration submitted! Waiting for approval.' });
   } catch (err) {
