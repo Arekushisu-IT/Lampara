@@ -28,8 +28,8 @@ router.get('/', verifyToken, async (req, res) => {
   try {
     const conn = await pool.getConnection();
 
-    const [players] = await conn.query(
-      'SELECT id, name, username, school, level, experience, status, is_online, created_at FROM players ORDER BY created_at DESC'
+   const [players] = await conn.query(
+      'SELECT id, name, username, school, level, experience, status, is_online, chapter, suspicion, created_at FROM players ORDER BY created_at DESC'
     );
 
     conn.release();
