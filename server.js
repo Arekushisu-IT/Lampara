@@ -33,6 +33,10 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
+// ✨ NEW: Add Logger HERE (It tracks every request before it hits the routes!)
+const logger = require('./src/middleware/logger');
+app.use(logger);
+
 // ============================================================
 // ROUTES
 // ============================================================
@@ -48,7 +52,7 @@ app.use('/api/auth', authRoutes);
 // Logs routes
 app.use('/api/logs', logsRoutes);
 
-// Players routes (FIXED - now includes PUT for approvals!)
+// Players routes
 app.use('/api/players', playersRoutes);
 
 // Quests routes
@@ -61,46 +65,23 @@ app.get('/', (req, res) => {
     version: '1.0.0',
     endpoints: {
       health: '/api/health',
-      auth: {
-        login: 'POST /api/auth/login',
-        register: 'POST /api/auth/register',
-        me: 'GET /api/auth/me',
-        playerLogin: 'POST /api/auth/player-login',
-        playerRegister: 'POST /api/auth/player-register'
-      },
-      data: {
-        players: {
-          getAll: 'GET /api/players',
-          getById: 'GET /api/players/:id',
-          create: 'POST /api/players',
-          update: 'PUT /api/players/:id',
-          delete: 'DELETE /api/players/:id'
-        },
-        quests: {
-          getAll: 'GET /api/quests',
-          getById: 'GET /api/quests/:id',
-          create: 'POST /api/quests',
-          update: 'PUT /api/quests/:id',
-          delete: 'DELETE /api/quests/:id'
-        },
-        logs: {
-          getAll: 'GET /api/logs',
-          create: 'POST /api/logs'
-        }
-      }
+      // ... existing endpoint documentation ...
     }
   });
 });
 
-// 404
-app.use((req, res) => {
+// 404 Route Not Found Catch
+app.use((req, res, next) => {
   res.status(404).json({
     error: 'Endpoint not found',
     path: req.path,
-    method: req.method,
-    availableEndpoints: 'GET /'
+    method: req.method
   });
 });
+
+// ✨ NEW: Add Global Error Handler HERE (It catches any crashes from the routes above!)
+const errorHandler = require('./src/middleware/errorHandler');
+app.use(errorHandler);
 
 // ============================================================
 // START SERVER
