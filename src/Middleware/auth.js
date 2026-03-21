@@ -1,19 +1,24 @@
-const jwt = require('jsonwebtoken');
+// File: routes/auth.js
+const express = require('express');
+const router = express.Router();
 
-const verifyToken = (req, res, next) => {
-  const token = req.headers['authorization']?.split(' ')[1];
-  
-  if (!token) {
-    return res.status(401).json({ error: 'No token provided' });
-  }
+// 1. Import our Middlewares (Security & Validation)
+const verifyToken = require('../src/middleware/auth');
+const { validatePlayerRegister, validate } = require('../src/middleware/validation');
 
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'dev-secret-key');
-    req.user = decoded; // Saves { id, username/email, role } for the next step to use!
-    next(); // Passes them through the security gate
-  } catch (err) {
-    res.status(401).json({ error: 'Invalid or expired token' });
-  }
-};
+// 2. Import our Database Logic (Controllers)
+const { adminLogin, playerLogin, playerLogout, getMe, adminRegister, playerRegister } = require('../src/controllers/authController');
 
-module.exports = verifyToken;
+// 3. Map the URLs
+router.post('/login', adminLogin);
+router.post('/register', adminRegister);
+
+router.post('/player-login', playerLogin);
+router.post('/player-logout', playerLogout);
+
+// ✨ NEW: We put the validators right here! The request must pass both before reaching playerRegister
+router.post('/player-register', validatePlayerRegister, validate, playerRegister);
+
+router.get('/me', verifyToken, getMe); 
+
+module.exports = router;
