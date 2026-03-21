@@ -119,7 +119,7 @@ async function startServer() {
     console.error('✗ Database Connection Error:', err.message);
   }
 
-  app.listen(PORT, () => {
+  app.listen(PORT, () => {  
     console.log('✓ LAMPARA Backend server running on port ' + PORT);
     console.log('✓ Environment: ' + process.env.NODE_ENV);
     console.log('✓ API Documentation:');
