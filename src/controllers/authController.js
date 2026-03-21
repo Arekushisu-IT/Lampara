@@ -48,9 +48,8 @@ const playerLogin = async (req, res) => {
     const passwordMatch = await bcryptjs.compare(password, player.password);
     if (!passwordMatch) return res.status(401).json({ error: 'Invalid Username or Password.' });
 
-    if (player.status === 'inactive' || player.status === 'pending') {
-      return res.status(403).json({ error: 'Your account is pending teacher approval.' });
-    }
+    // NOTE: The 'pending/inactive' block has been removed here so anyone can log in immediately.
+
     if (player.status === 'banned' || player.status === 'suspended') {
       return res.status(403).json({ error: 'Your account has been suspended.' });
     }
@@ -97,7 +96,6 @@ const playerLogout = async (req, res) => {
 // ==========================================
 const getMe = async (req, res) => {
   try {
-    // req.user was securely provided by our Middleware!
     if (req.user.role === 'player') {
       const [players] = await pool.query('SELECT id, username, name, school, level, experience, status FROM players WHERE id = ?', [req.user.id]);
       if (players.length === 0) return res.status(401).json({ error: 'Player not found' });
@@ -143,9 +141,11 @@ const playerRegister = async (req, res) => {
     if (existing.length > 0) return res.status(400).json({ error: 'Username is already registered.' });
 
     const hashedPassword = await bcryptjs.hash(password, 10);
-    await pool.query('INSERT INTO players (name, username, password, school, level, experience, status, chapter, suspicion) VALUES (?, ?, ?, ?, 1, 0, "inactive", 1, 0)', [name, username, hashedPassword, school || null]);
     
-    res.status(201).json({ message: 'Registration submitted! Waiting for approval.' });
+    // NOTE: Changed default status from "inactive" to "active" so they are verified immediately
+    await pool.query('INSERT INTO players (name, username, password, school, level, experience, status, chapter, suspicion) VALUES (?, ?, ?, ?, 1, 0, "active", 1, 0)', [name, username, hashedPassword, school || null]);
+    
+    res.status(201).json({ message: 'Registration submitted! You can now log in.' });
   } catch (err) {
     console.error('Player registration error:', err);
     res.status(500).json({ error: 'Registration failed' });
