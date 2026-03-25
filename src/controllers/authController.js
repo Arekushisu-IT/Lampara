@@ -64,7 +64,7 @@ const playerLogin = async (req, res) => {
     return res.json({
       message: 'Login successful',
       token,
-      player: { id: player.id, name: player.name, username: player.username, school: player.school, level: player.level, experience: player.experience, status: player.status }
+      player: { id: player.id, name: player.name, username: player.username, email: player.email, level: player.level, experience: player.experience, status: player.status }
     });
   } catch (err) {
     console.error('Player login error:', err);
@@ -95,7 +95,7 @@ const playerLogout = async (req, res) => {
 const getMe = async (req, res) => {
   try {
     if (req.user.role === 'player') {
-      const [players] = await pool.query('SELECT id, username, name, school, level, experience, status FROM players WHERE id = ?', [req.user.id]);
+      const [players] = await pool.query('SELECT id, username, name, email, level, experience, status FROM players WHERE id = ?', [req.user.id]);
       if (players.length === 0) return res.status(401).json({ error: 'Player not found' });
       return res.json({ user: players[0] });
     } else {
@@ -132,7 +132,7 @@ const adminRegister = async (req, res) => {
 // ==========================================
 const playerRegister = async (req, res) => {
   try {
-    const { name, username, password, school } = req.body;
+    const { name, username, password, email } = req.body;
     if (!name || !username || !password) return res.status(400).json({ error: 'Name, Username, and Password are required' });
 
     const [existing] = await pool.query('SELECT id FROM players WHERE username = ?', [username]);
@@ -141,7 +141,7 @@ const playerRegister = async (req, res) => {
     const hashedPassword = await bcryptjs.hash(password, 10);
     
     // FIXED: Changed "pending" back to "inactive" so your database accepts it!
-    await pool.query('INSERT INTO players (name, username, password, school, level, experience, status, chapter, suspicion) VALUES (?, ?, ?, ?, 1, 0, "inactive", 1, 0)', [name, username, hashedPassword, school || null]);
+    await pool.query('INSERT INTO players (name, username, password, email, level, experience, status, chapter, suspicion) VALUES (?, ?, ?, ?, 1, 0, "inactive", 1, 0)', [name, username, hashedPassword, email || null]);
     
     res.status(201).json({ message: 'Registration submitted! Waiting for approval.' });
   } catch (err) {
