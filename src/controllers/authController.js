@@ -1,3 +1,7 @@
+const { OAuth2Client } = require('google-auth-library');
+// Replace this with the exact Client ID you got from Google Cloud!
+const googleClient = new OAuth2Client("351853811252-b88at4b83vljbvo2f7nqaikb13qjater.apps.googleusercontent.com");
+
 const bcryptjs = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const pool = require('../../db'); 
@@ -176,4 +180,24 @@ const updatePlayerStatus = async (req, res) => {
   }
 };
 
-module.exports = { adminLogin, playerLogin, playerLogout, getMe, adminRegister, playerRegister, updatePlayerStatus };
+// ==========================================
+// CHECK IF USERNAME IS TAKEN
+// ==========================================
+const checkUsername = async (req, res) => {
+  try {
+    const { username } = req.body;
+    if (!username) return res.status(400).json({ error: 'Username is required' });
+    
+    const [existing] = await pool.query('SELECT id FROM players WHERE username = ?', [username]);
+    
+    if (existing.length > 0) {
+      return res.json({ available: false, message: 'Username is already taken' });
+    }
+    
+    return res.json({ available: true, message: 'Username is available' });
+  } catch (err) {
+    console.error('Username check error:', err);
+    res.status(500).json({ error: 'Failed to check username' });
+  }
+};
+module.exports = { adminLogin, playerLogin, playerLogout, getMe, adminRegister, playerRegister, updatePlayerStatus, checkUsername };
