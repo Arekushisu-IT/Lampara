@@ -1,5 +1,4 @@
-// File: src/middleware/auth.js
-// File: src/middleware/auth.js
+
 const jwt = require('jsonwebtoken');
 
 const verifyToken = (req, res, next) => {
