@@ -26,7 +26,8 @@
     "google-auth-library": "^10.6.2",
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.1",
-    "mysql2": "^3.6.5"
+    "mysql2": "^3.6.5",
+    "nodemailer": "^8.0.4"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"
