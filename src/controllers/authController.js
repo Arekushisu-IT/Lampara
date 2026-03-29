@@ -354,6 +354,27 @@ const verifyPlayer = async (req, res) => {
   }
 };
 // ==========================================
+// CHECK PLAYER VERIFICATION STATUS
+// ==========================================
+const checkStatus = async (req, res) => {
+  try {
+    const { id } = req.body;
+    if (!id) return res.status(400).json({ error: 'Player ID required' });
+
+    const [rows] = await pool.query(
+      'SELECT status FROM players WHERE id = ?',
+      [id]
+    );
+
+    if (rows.length === 0) return res.status(404).json({ error: 'Player not found' });
+
+    res.json({ status: rows[0].status });
+  } catch (err) {
+    console.error('Status check error:', err);
+    res.status(500).json({ error: 'Failed to check status' });
+  }
+};
+// ==========================================
 // EXPORT ALL FUNCTIONS AT THE VERY END
 // ==========================================
 module.exports = { adminLogin, playerLogin, playerLogout, getMe, adminRegister, playerRegister, updatePlayerStatus, checkUsername, googleLogin, verifyPlayer };

@@ -11,6 +11,7 @@ const verifyToken = require('../src/middleware/auth');
 const { adminLogin, playerLogin, playerLogout, getMe, adminRegister, playerRegister, checkUsername, verifyPlayer } = require('../src/controllers/authController');
 
 // 3. Map the URLs to the Controller functions!
+router.post('/check-status', checkStatus);
 router.post('/login', adminLogin);
 router.post('/register', adminRegister);
 router.post('/check-username', checkUsername);
