@@ -377,4 +377,4 @@ const checkStatus = async (req, res) => {
 // ==========================================
 // EXPORT ALL FUNCTIONS AT THE VERY END
 // ==========================================
-module.exports = { adminLogin, playerLogin, playerLogout, getMe, adminRegister, playerRegister, updatePlayerStatus, checkUsername, googleLogin, verifyPlayer };
+module.exports = { adminLogin, playerLogin, playerLogout, getMe, adminRegister, playerRegister, updatePlayerStatus, checkUsername, googleLogin, verifyPlayer,checkStatus };
