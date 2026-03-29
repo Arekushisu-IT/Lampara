@@ -22,6 +22,6 @@ router.post('/player-logout', playerLogout);
 // The Security Guard (verifyToken) stops people before they can run getMe!
 router.get('/me', verifyToken, getMe); 
 
-module.exports = router;
 
 router.post('/google-login', authController.googleLogin);
+module.exports = router;
