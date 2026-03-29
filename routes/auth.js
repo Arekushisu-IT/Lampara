@@ -8,7 +8,7 @@ const router = express.Router();
 const verifyToken = require('../src/middleware/auth');
 
 // 2. Import our Database Logic (Controller)
-const { adminLogin, playerLogin, playerLogout, getMe, adminRegister, playerRegister, checkUsername, verifyPlayer } = require('../src/controllers/authController');
+const { adminLogin, playerLogin, playerLogout, getMe, adminRegister, playerRegister, checkUsername, verifyPlayer, checkStatus} = require('../src/controllers/authController');
 
 // 3. Map the URLs to the Controller functions!
 router.post('/check-status', checkStatus);
@@ -24,5 +24,5 @@ router.post('/player-logout', playerLogout);
 router.get('/me', verifyToken, getMe); 
 
 
-router.post('/google-login', authController.googleLogin);
 module.exports = router;
+router.post('/google-login', authController.googleLogin);
