@@ -23,13 +23,13 @@ const verifyToken = (req, res, next) => {
   }
 };
 
-// Get all players (UPDATED: Removed email, added username, school, is_online)
+// Get all players
 router.get('/', verifyToken, async (req, res) => {
   try {
     const conn = await pool.getConnection();
 
    const [players] = await conn.query(
-      'SELECT id, name, username, school, level, experience, status, is_online, chapter, suspicion, created_at FROM players ORDER BY created_at DESC'
+      'SELECT id, name, username, email, level, experience, status, is_online, chapter, suspicion, created_at FROM players ORDER BY created_at DESC'
     );
 
     conn.release();
@@ -69,7 +69,7 @@ router.get('/:id', verifyToken, async (req, res) => {
   }
 });
 
-// Create new player from Admin Panel (UPDATED: email -> username)
+// Create new player from Admin Panel
 router.post('/', verifyToken, [
   body('name').notEmpty(),
   body('username').notEmpty() 
@@ -79,19 +79,20 @@ router.post('/', verifyToken, [
     return res.status(400).json({ errors: errors.array() });
   }
 
-  const { name, username, school, level = 1, experience = 0, status = 'active' } = req.body;
+  // CHANGED: Extracted email instead of school
+  const { name, username, email, level = 1, experience = 0, status = 'active' } = req.body;
 
   try {
     const conn = await pool.getConnection();
 
-    // Default password for players created manually by admin (e.g., "lampara123")
-    // Note: Usually players self-register, but this is a fallback for manual creation
+    // Default password for players created manually by admin
     const bcryptjs = require('bcryptjs');
     const hashedPassword = await bcryptjs.hash('lampara123', 10);
 
+    // CHANGED: Insert into email column instead of school
     const [result] = await conn.query(
-      'INSERT INTO players (name, username, password, school, level, experience, status, is_online) VALUES (?, ?, ?, ?, ?, ?, ?, false)',
-      [name, username, hashedPassword, school || null, level, experience, status]
+      'INSERT INTO players (name, username, password, email, level, experience, status, is_online) VALUES (?, ?, ?, ?, ?, ?, ?, false)',
+      [name, username, hashedPassword, email || null, level, experience, status]
     );
 
     conn.release();
@@ -103,16 +104,18 @@ router.post('/', verifyToken, [
   } catch (err) {
     console.error('Error creating player:', err);
     if (err.code === 'ER_DUP_ENTRY') {
-      return res.status(400).json({ error: 'Username already exists' });
+      return res.status(400).json({ error: 'Username or Email already exists' });
     }
     res.status(500).json({ error: 'Failed to create player' });
   }
 });
 
-// Update player (UPDATED: Added username, school, is_online support)
+// Update player
 router.put('/:id', verifyToken, async (req, res) => {
   const { id } = req.params;
-  const { name, username, school, level, experience, status, is_online } = req.body;
+  
+  // CHANGED: Extracted email instead of school
+  const { name, username, email, level, experience, status, is_online } = req.body;
 
   try {
     const conn = await pool.getConnection();
@@ -129,9 +132,10 @@ router.put('/:id', verifyToken, async (req, res) => {
       updates.push('username = ?');
       values.push(username);
     }
-    if (school !== undefined) {
-      updates.push('school = ?');
-      values.push(school);
+    // CHANGED: Check and update email instead of school
+    if (email !== undefined) {
+      updates.push('email = ?');
+      values.push(email);
     }
     if (level !== undefined) {
       updates.push('level = ?');
