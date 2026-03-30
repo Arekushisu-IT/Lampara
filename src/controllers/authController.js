@@ -172,27 +172,31 @@ const playerRegister = async (req, res) => {
 
     // Send verification email if email provided
     if (email) {
-      const verifyUrl = `${process.env.FRONTEND_URL}/verify.html?token=${token}`;
+      try {
+        const verifyUrl = `${process.env.FRONTEND_URL}/verify.html?token=${token}`;
 
-      await transporter.sendMail({
-        from: `"LAMPARA Archive" <${process.env.EMAIL_USER}>`,
-        to: email,
-        subject: '⚜ Verify Your Lampara Account',
-        html: `
-          <div style="font-family:Georgia,serif;background:#0a0805;color:#e8dcc8;padding:40px;max-width:500px;margin:0 auto;border:1px solid #3d2d14;border-radius:8px;">
-            <h2 style="color:#e8b84b;letter-spacing:6px;font-size:24px;">⚜ LAMPARA</h2>
-            <p style="font-size:16px;">Welcome, <strong>${name}</strong>.</p>
-            <p style="color:#a89070;line-height:1.8;">Click the button below to verify your account and start playing.</p>
-            <div style="text-align:center;margin:28px 0;">
-              <a href="${verifyUrl}" 
-                 style="background:rgba(201,149,58,.2);border:1px solid #7a5820;border-radius:5px;color:#e8b84b;padding:14px 32px;text-decoration:none;font-size:13px;letter-spacing:2px;">
-                ⚜ VERIFY ACCOUNT
-              </a>
+        await transporter.sendMail({
+          from: `"LAMPARA Archive" <${process.env.EMAIL_USER}>`,
+          to: email,
+          subject: '⚜ Verify Your Lampara Account',
+          html: `
+            <div style="font-family:Georgia,serif;background:#0a0805;color:#e8dcc8;padding:40px;max-width:500px;margin:0 auto;border:1px solid #3d2d14;border-radius:8px;">
+              <h2 style="color:#e8b84b;letter-spacing:6px;font-size:24px;">⚜ LAMPARA</h2>
+              <p style="font-size:16px;">Welcome, <strong>${name}</strong>.</p>
+              <p style="color:#a89070;line-height:1.8;">Click the button below to verify your account and start playing.</p>
+              <div style="text-align:center;margin:28px 0;">
+                <a href="${verifyUrl}" 
+                   style="background:rgba(201,149,58,.2);border:1px solid #7a5820;border-radius:5px;color:#e8b84b;padding:14px 32px;text-decoration:none;font-size:13px;letter-spacing:2px;">
+                  ⚜ VERIFY ACCOUNT
+                </a>
+              </div>
+              <p style="font-size:11px;color:#6b5740;">This link expires in 24 hours.<br>STI College General Santos · BSIT Capstone 2026</p>
             </div>
-            <p style="font-size:11px;color:#6b5740;">This link expires in 24 hours.<br>STI College General Santos · BSIT Capstone 2026</p>
-          </div>
-        `
-      });
+          `
+        });
+      } catch (emailErr) {
+        console.error('CRITICAL: Player saved to DB, but Email failed to send:', emailErr);
+      }
     }
 
     res.status(201).json({ 
