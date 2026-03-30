@@ -1,20 +1,38 @@
-const crypto     = require('crypto');    
-const nodemailer = require('nodemailer')
+const crypto   = require('crypto');    
 
 const bcryptjs = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const pool = require('../../db'); 
 
-const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',
-  port: 587,
-  secure: false, // true for 465, false for other ports like 587
-  requireTLS: true, // Force TLS
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.MAIL_PASSWORD
+/**
+ * Send an email via Google Apps Script webhook.
+ * This bypasses Railway's SMTP port block by using HTTPS (port 443).
+ */
+async function sendEmailViaWebhook(to, subject, html) {
+  const webhookUrl = process.env.EMAIL_WEBHOOK_URL;
+  if (!webhookUrl) {
+    console.error('EMAIL_WEBHOOK_URL is not set in environment variables!');
+    return;
   }
-});
+
+  const response = await fetch(webhookUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ to, subject, html }),
+    redirect: 'follow' // Google Apps Script redirects on POST
+  });
+
+  if (!response.ok) {
+    throw new Error(`Webhook responded with status ${response.status}`);
+  }
+
+  const result = await response.json();
+  if (!result.success) {
+    throw new Error(result.error || 'Webhook email failed');
+  }
+
+  console.log(`Verification email sent to ${to} via webhook`);
+}
 
 // ==========================================
 // ADMIN & STAFF LOGIN
@@ -178,28 +196,24 @@ const playerRegister = async (req, res) => {
       try {
         const verifyUrl = `${process.env.FRONTEND_URL}/verify.html?token=${token}`;
 
-        // Send the email in the background (DO NOT await it) so Unity doesn't freeze!
-        transporter.sendMail({
-          from: `"LAMPARA Archive" <${process.env.EMAIL_USER}>`,
-          to: email,
-          subject: '⚜ Verify Your Lampara Account',
-          html: `
-            <div style="font-family:Georgia,serif;background:#0a0805;color:#e8dcc8;padding:40px;max-width:500px;margin:0 auto;border:1px solid #3d2d14;border-radius:8px;">
-              <h2 style="color:#e8b84b;letter-spacing:6px;font-size:24px;">⚜ LAMPARA</h2>
-              <p style="font-size:16px;">Welcome, <strong>${name}</strong>.</p>
-              <p style="color:#a89070;line-height:1.8;">Click the button below to verify your account and start playing.</p>
-              <div style="text-align:center;margin:28px 0;">
-                <a href="${verifyUrl}" 
-                   style="background:rgba(201,149,58,.2);border:1px solid #7a5820;border-radius:5px;color:#e8b84b;padding:14px 32px;text-decoration:none;font-size:13px;letter-spacing:2px;">
-                  ⚜ VERIFY ACCOUNT
-                </a>
-              </div>
-              <p style="font-size:11px;color:#6b5740;">This link expires in 24 hours.<br>STI College General Santos · BSIT Capstone 2026</p>
+        const emailHtml = `
+          <div style="font-family:Georgia,serif;background:#0a0805;color:#e8dcc8;padding:40px;max-width:500px;margin:0 auto;border:1px solid #3d2d14;border-radius:8px;">
+            <h2 style="color:#e8b84b;letter-spacing:6px;font-size:24px;">⚜ LAMPARA</h2>
+            <p style="font-size:16px;">Welcome, <strong>${name}</strong>.</p>
+            <p style="color:#a89070;line-height:1.8;">Click the button below to verify your account and start playing.</p>
+            <div style="text-align:center;margin:28px 0;">
+              <a href="${verifyUrl}" 
+                 style="background:rgba(201,149,58,.2);border:1px solid #7a5820;border-radius:5px;color:#e8b84b;padding:14px 32px;text-decoration:none;font-size:13px;letter-spacing:2px;">
+                ⚜ VERIFY ACCOUNT
+              </a>
             </div>
-          `
-        }).catch(emailErr => {
-          console.error('CRITICAL: Player saved to DB, but Email failed to send:', emailErr);
-        });
+            <p style="font-size:11px;color:#6b5740;">This link expires in 24 hours.<br>STI College General Santos · BSIT Capstone 2026</p>
+          </div>
+        `;
+
+        // Send in background so Unity doesn't freeze
+        sendEmailViaWebhook(email, '⚜ Verify Your Lampara Account', emailHtml)
+          .catch(err => console.error('CRITICAL: Player saved to DB, but Email failed:', err));
       } catch (err) {
         console.error('Email configuration error:', err);
       }
