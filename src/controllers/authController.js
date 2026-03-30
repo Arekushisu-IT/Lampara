@@ -1,5 +1,3 @@
-const { OAuth2Client } = require('google-auth-library');
-const googleClient = new OAuth2Client("351853811252-b88at4b83vljbvo2f7nqaikb13qjater.apps.googleusercontent.com");
 const crypto     = require('crypto');    
 const nodemailer = require('nodemailer')
 
@@ -32,7 +30,7 @@ const adminLogin = async (req, res) => {
 
     const token = jwt.sign(
       { id: user.id, email: user.email, role: user.role },
-      process.env.JWT_SECRET || 'dev-secret-key',
+      process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRATION || '7d' }
     );
 
@@ -67,7 +65,7 @@ const playerLogin = async (req, res) => {
 
     const token = jwt.sign(
       { id: player.id, username: player.username, role: 'player' },
-      process.env.JWT_SECRET || 'dev-secret-key',
+      process.env.JWT_SECRET,
       { expiresIn: '30d' }
     );
 
@@ -208,30 +206,6 @@ const playerRegister = async (req, res) => {
 };
 
 // ==========================================
-// ADMIN: UPDATE PLAYER STATUS
-// ==========================================
-const updatePlayerStatus = async (req, res) => {
-  try {
-    const { id, status } = req.body; 
-
-    if (!id || !status) {
-      return res.status(400).json({ error: 'Player ID and new status are required' });
-    }
-
-    await pool.query('UPDATE players SET status = ? WHERE id = ?', [status, id]);
-
-    if (status === 'suspended') {
-      await pool.query('UPDATE players SET is_online = false WHERE id = ?', [id]);
-    }
-
-    res.json({ message: `Player successfully marked as ${status}` });
-  } catch (err) {
-    console.error('Status update error:', err);
-    res.status(500).json({ error: 'Failed to update player status' });
-  }
-};
-
-// ==========================================
 // CHECK IF USERNAME IS TAKEN
 // ==========================================
 const checkUsername = async (req, res) => {
@@ -252,75 +226,6 @@ const checkUsername = async (req, res) => {
   }
 };
 
-// ==========================================
-// GOOGLE LOGIN LOGIC (NEW & FIXED)
-// ==========================================
-const googleLogin = async (req, res) => {
-    const { idToken } = req.body;
-
-    try {
-        // 1. Verify token with Google
-        const ticket = await googleClient.verifyIdToken({
-            idToken: idToken,
-            audience: "351853811252-b88at4b83vljbvo2f7nqaikb13qjater.apps.googleusercontent.com",
-        });
-        
-        const payload = ticket.getPayload();
-        const { email, name } = payload; 
-
-        // 2. Check Database using pool.query
-        const [results] = await pool.query('SELECT * FROM players WHERE email = ?', [email]);
-
-        if (results.length > 0) {
-            // USER EXISTS
-            const player = results[0];
-            
-            // Auto-activate them if they were inactive
-            if (player.status !== 'active') {
-                await pool.query('UPDATE players SET status = "active" WHERE id = ?', [player.id]);
-                player.status = 'active';
-            }
-
-            // Log them in
-            const token = jwt.sign(
-              { id: player.id, username: player.username, role: 'player' }, 
-              process.env.JWT_SECRET || 'dev-secret-key', 
-              { expiresIn: '30d' }
-            );
-            
-            await pool.query('UPDATE players SET last_login = CURRENT_TIMESTAMP, is_online = true WHERE id = ?', [player.id]);
-
-            return res.status(200).json({ message: "Google Login successful", token, player });
-        } else {
-            // NEW USER! Auto-register them
-            const baseUsername = email.split('@')[0];
-            const dummyPassword = "[GOOGLE_ACCOUNT]"; 
-
-            // Insert matching your exact database columns
-            const [insertResult] = await pool.query(
-                'INSERT INTO players (name, username, email, password, level, experience, status, chapter, suspicion) VALUES (?, ?, ?, ?, 1, 0, "active", 1, 0)',
-                [name, baseUsername, email, dummyPassword]
-            );
-
-            // Fetch newly created player
-            const [newResults] = await pool.query('SELECT * FROM players WHERE id = ?', [insertResult.insertId]);
-            const newPlayer = newResults[0];
-
-            const token = jwt.sign(
-              { id: newPlayer.id, username: newPlayer.username, role: 'player' }, 
-              process.env.JWT_SECRET || 'dev-secret-key', 
-              { expiresIn: '30d' }
-            );
-            
-            await pool.query('UPDATE players SET last_login = CURRENT_TIMESTAMP, is_online = true WHERE id = ?', [newPlayer.id]);
-
-            return res.status(200).json({ message: "Google Registration successful", token, player: newPlayer });
-        }
-    } catch (error) {
-        console.error("Google Token Verification Failed:", error);
-        res.status(401).json({ message: "Invalid Google Token" });
-    }
-};
 // ==========================================
 // VERIFY PLAYER EMAIL
 // ==========================================
@@ -353,6 +258,7 @@ const verifyPlayer = async (req, res) => {
     res.status(500).json({ error: 'Verification failed' });
   }
 };
+
 // ==========================================
 // CHECK PLAYER VERIFICATION STATUS
 // ==========================================
@@ -374,7 +280,8 @@ const checkStatus = async (req, res) => {
     res.status(500).json({ error: 'Failed to check status' });
   }
 };
+
 // ==========================================
-// EXPORT ALL FUNCTIONS AT THE VERY END
+// EXPORT ALL FUNCTIONS
 // ==========================================
-module.exports = { adminLogin, playerLogin, playerLogout, getMe, adminRegister, playerRegister, updatePlayerStatus, checkUsername, googleLogin, verifyPlayer,checkStatus };
+module.exports = { adminLogin, playerLogin, playerLogout, getMe, adminRegister, playerRegister, checkUsername, verifyPlayer, checkStatus };

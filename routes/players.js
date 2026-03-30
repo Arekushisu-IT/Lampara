@@ -2,70 +2,46 @@ const express = require('express');
 const { validationResult, body } = require('express-validator');
 const pool = require('../db');
 
+// Use the SHARED middleware instead of a copy-paste
+const verifyToken = require('../src/middleware/auth');
+const { NotFoundError, ValidationError } = require('../src/utils/errors');
+
 const router = express.Router();
 
-// Middleware to verify JWT token
-const verifyToken = (req, res, next) => {
-  const token = req.headers['authorization']?.split(' ')[1];
-  
-  if (!token) {
-    return res.status(401).json({ error: 'No token provided' });
-  }
-
-  try {
-    const jwt = require('jsonwebtoken');
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.userId = decoded.id;
-    req.userRole = decoded.role;
-    next();
-  } catch (err) {
-    res.status(401).json({ error: 'Invalid token' });
-  }
-};
-
 // Get all players
-router.get('/', verifyToken, async (req, res) => {
+router.get('/', verifyToken, async (req, res, next) => {
   try {
-    const conn = await pool.getConnection();
-
-   const [players] = await conn.query(
+    // Use pool.query() directly — no connection leak risk
+    const [players] = await pool.query(
       'SELECT id, name, username, email, level, experience, status, is_online, chapter, suspicion, created_at FROM players ORDER BY created_at DESC'
     );
-
-    conn.release();
 
     res.json({ 
       count: players.length,
       players 
     });
   } catch (err) {
-    console.error('Error fetching players:', err);
-    res.status(500).json({ error: 'Failed to fetch players' });
+    next(err); // Let global error handler catch it
   }
 });
 
 // Get player by ID
-router.get('/:id', verifyToken, async (req, res) => {
+router.get('/:id', verifyToken, async (req, res, next) => {
   const { id } = req.params;
 
   try {
-    const conn = await pool.getConnection();
-
-    const [players] = await conn.query(
+    const [players] = await pool.query(
       'SELECT * FROM players WHERE id = ?',
       [id]
     );
 
-    conn.release();
-
     if (players.length === 0) {
-      return res.status(404).json({ error: 'Player not found' });
+      throw new NotFoundError('Player not found');
     }
 
     res.json({ player: players[0] });
   } catch (err) {
-    console.error('Error fetching player:', err);
-    res.status(500).json({ error: 'Failed to fetch player' });
+    next(err);
   }
 });
 
@@ -73,53 +49,42 @@ router.get('/:id', verifyToken, async (req, res) => {
 router.post('/', verifyToken, [
   body('name').notEmpty(),
   body('username').notEmpty() 
-], async (req, res) => {
+], async (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({ errors: errors.array() });
   }
 
-  // CHANGED: Extracted email instead of school
   const { name, username, email, level = 1, experience = 0, status = 'active' } = req.body;
 
   try {
-    const conn = await pool.getConnection();
-
     // Default password for players created manually by admin
     const bcryptjs = require('bcryptjs');
     const hashedPassword = await bcryptjs.hash('lampara123', 10);
 
-    // CHANGED: Insert into email column instead of school
-    const [result] = await conn.query(
+    const [result] = await pool.query(
       'INSERT INTO players (name, username, password, email, level, experience, status, is_online) VALUES (?, ?, ?, ?, ?, ?, ?, false)',
       [name, username, hashedPassword, email || null, level, experience, status]
     );
-
-    conn.release();
 
     res.status(201).json({
       message: 'Player created successfully',
       playerId: result.insertId
     });
   } catch (err) {
-    console.error('Error creating player:', err);
     if (err.code === 'ER_DUP_ENTRY') {
       return res.status(400).json({ error: 'Username or Email already exists' });
     }
-    res.status(500).json({ error: 'Failed to create player' });
+    next(err);
   }
 });
 
 // Update player
-router.put('/:id', verifyToken, async (req, res) => {
+router.put('/:id', verifyToken, async (req, res, next) => {
   const { id } = req.params;
-  
-  // CHANGED: Extracted email instead of school
   const { name, username, email, level, experience, status, is_online } = req.body;
 
   try {
-    const conn = await pool.getConnection();
-
     let updateQuery = 'UPDATE players SET ';
     const updates = [];
     const values = [];
@@ -132,7 +97,6 @@ router.put('/:id', verifyToken, async (req, res) => {
       updates.push('username = ?');
       values.push(username);
     }
-    // CHANGED: Check and update email instead of school
     if (email !== undefined) {
       updates.push('email = ?');
       values.push(email);
@@ -155,47 +119,38 @@ router.put('/:id', verifyToken, async (req, res) => {
     }
 
     if (updates.length === 0) {
-      conn.release();
-      return res.status(400).json({ error: 'No fields to update' });
+      throw new ValidationError('No fields to update');
     }
 
     updateQuery += updates.join(', ') + ' WHERE id = ?';
     values.push(id);
 
-    const [result] = await conn.query(updateQuery, values);
-
-    conn.release();
+    const [result] = await pool.query(updateQuery, values);
 
     if (result.affectedRows === 0) {
-      return res.status(404).json({ error: 'Player not found' });
+      throw new NotFoundError('Player not found');
     }
 
     res.json({ message: 'Player updated successfully' });
   } catch (err) {
-    console.error('Error updating player:', err);
-    res.status(500).json({ error: 'Failed to update player' });
+    next(err);
   }
 });
 
 // Delete player
-router.delete('/:id', verifyToken, async (req, res) => {
+router.delete('/:id', verifyToken, async (req, res, next) => {
   const { id } = req.params;
 
   try {
-    const conn = await pool.getConnection();
-
-    const [result] = await conn.query('DELETE FROM players WHERE id = ?', [id]);
-
-    conn.release();
+    const [result] = await pool.query('DELETE FROM players WHERE id = ?', [id]);
 
     if (result.affectedRows === 0) {
-      return res.status(404).json({ error: 'Player not found' });
+      throw new NotFoundError('Player not found');
     }
 
     res.json({ message: 'Player deleted successfully' });
   } catch (err) {
-    console.error('Error deleting player:', err);
-    res.status(500).json({ error: 'Failed to delete player' });
+    next(err);
   }
 });
 

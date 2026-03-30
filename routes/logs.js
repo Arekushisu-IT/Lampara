@@ -1,12 +1,16 @@
 const express = require('express');
 const pool = require('../db');
 
+// Add authentication — logs should only be accessible to logged-in admins
+const verifyToken = require('../src/middleware/auth');
+
 const router = express.Router();
 
 /**
  * GET /api/logs
+ * Now protected — only authenticated users can read activity logs
  */
-router.get('/', async (req, res) => {
+router.get('/', verifyToken, async (req, res) => {
   try {
     const [logs] = await pool.query(
       'SELECT * FROM activity_logs ORDER BY timestamp DESC LIMIT 100'
@@ -20,16 +24,19 @@ router.get('/', async (req, res) => {
 
 /**
  * POST /api/logs
+ * Now protected — uses the logged-in user's ID from their JWT token
+ * instead of defaulting to user_id = 1
  */
-router.post('/', async (req, res) => {
+router.post('/', verifyToken, async (req, res) => {
   try {
-    const { action, description, user_id } = req.body;
+    const { action, description } = req.body;
 
     if (!action) {
       return res.status(400).json({ error: 'Action required' });
     }
 
-    const userId = user_id || 1;
+    // Use the authenticated user's ID from the JWT token
+    const userId = req.user.id;
 
     await pool.query(
       'INSERT INTO activity_logs (user_id, action, description) VALUES (?, ?, ?)',

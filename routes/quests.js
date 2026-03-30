@@ -2,61 +2,37 @@ const express = require('express');
 const { validationResult, body } = require('express-validator');
 const pool = require('../db');
 
+// Use the SHARED middleware instead of a copy-paste
+const verifyToken = require('../src/middleware/auth');
+const { NotFoundError, ValidationError } = require('../src/utils/errors');
+
 const router = express.Router();
 
-// Middleware to verify JWT token
-const verifyToken = (req, res, next) => {
-  const token = req.headers['authorization']?.split(' ')[1];
-  
-  if (!token) {
-    return res.status(401).json({ error: 'No token provided' });
-  }
-
-  try {
-    const jwt = require('jsonwebtoken');
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.userId = decoded.id;
-    req.userRole = decoded.role;
-    next();
-  } catch (err) {
-    res.status(401).json({ error: 'Invalid token' });
-  }
-};
-
 // Get all quests
-router.get('/', verifyToken, async (req, res) => {
+router.get('/', verifyToken, async (req, res, next) => {
   try {
-    const conn = await pool.getConnection();
-
-    const [quests] = await conn.query(
+    const [quests] = await pool.query(
       'SELECT id, chapter, title, description, status, created_at FROM quests ORDER BY chapter, id'
     );
-
-    conn.release();
 
     res.json({ 
       count: quests.length,
       quests 
     });
   } catch (err) {
-    console.error('Error fetching quests:', err);
-    res.status(500).json({ error: 'Failed to fetch quests' });
+    next(err);
   }
 });
 
 // Get quests by chapter
-router.get('/chapter/:chapter', verifyToken, async (req, res) => {
+router.get('/chapter/:chapter', verifyToken, async (req, res, next) => {
   const { chapter } = req.params;
 
   try {
-    const conn = await pool.getConnection();
-
-    const [quests] = await conn.query(
+    const [quests] = await pool.query(
       'SELECT id, chapter, title, description, status FROM quests WHERE chapter = ? ORDER BY id',
       [chapter]
     );
-
-    conn.release();
 
     res.json({ 
       chapter,
@@ -64,33 +40,27 @@ router.get('/chapter/:chapter', verifyToken, async (req, res) => {
       quests 
     });
   } catch (err) {
-    console.error('Error fetching chapter quests:', err);
-    res.status(500).json({ error: 'Failed to fetch chapter quests' });
+    next(err);
   }
 });
 
 // Get quest by ID
-router.get('/:id', verifyToken, async (req, res) => {
+router.get('/:id', verifyToken, async (req, res, next) => {
   const { id } = req.params;
 
   try {
-    const conn = await pool.getConnection();
-
-    const [quests] = await conn.query(
+    const [quests] = await pool.query(
       'SELECT * FROM quests WHERE id = ?',
       [id]
     );
 
-    conn.release();
-
     if (quests.length === 0) {
-      return res.status(404).json({ error: 'Quest not found' });
+      throw new NotFoundError('Quest not found');
     }
 
     res.json({ quest: quests[0] });
   } catch (err) {
-    console.error('Error fetching quest:', err);
-    res.status(500).json({ error: 'Failed to fetch quest' });
+    next(err);
   }
 });
 
@@ -99,7 +69,7 @@ router.post('/', verifyToken, [
   body('chapter').notEmpty(),
   body('title').notEmpty(),
   body('description').notEmpty()
-], async (req, res) => {
+], async (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({ errors: errors.array() });
@@ -108,33 +78,26 @@ router.post('/', verifyToken, [
   const { chapter, title, description, status = 'active' } = req.body;
 
   try {
-    const conn = await pool.getConnection();
-
-    const [result] = await conn.query(
+    const [result] = await pool.query(
       'INSERT INTO quests (chapter, title, description, status) VALUES (?, ?, ?, ?)',
       [chapter, title, description, status]
     );
-
-    conn.release();
 
     res.status(201).json({
       message: 'Quest created successfully',
       questId: result.insertId
     });
   } catch (err) {
-    console.error('Error creating quest:', err);
-    res.status(500).json({ error: 'Failed to create quest' });
+    next(err);
   }
 });
 
 // Update quest
-router.put('/:id', verifyToken, async (req, res) => {
+router.put('/:id', verifyToken, async (req, res, next) => {
   const { id } = req.params;
   const { chapter, title, description, status } = req.body;
 
   try {
-    const conn = await pool.getConnection();
-
     let updateQuery = 'UPDATE quests SET ';
     const updates = [];
     const values = [];
@@ -157,47 +120,38 @@ router.put('/:id', verifyToken, async (req, res) => {
     }
 
     if (updates.length === 0) {
-      conn.release();
-      return res.status(400).json({ error: 'No fields to update' });
+      throw new ValidationError('No fields to update');
     }
 
     updateQuery += updates.join(', ') + ' WHERE id = ?';
     values.push(id);
 
-    const [result] = await conn.query(updateQuery, values);
-
-    conn.release();
+    const [result] = await pool.query(updateQuery, values);
 
     if (result.affectedRows === 0) {
-      return res.status(404).json({ error: 'Quest not found' });
+      throw new NotFoundError('Quest not found');
     }
 
     res.json({ message: 'Quest updated successfully' });
   } catch (err) {
-    console.error('Error updating quest:', err);
-    res.status(500).json({ error: 'Failed to update quest' });
+    next(err);
   }
 });
 
 // Delete quest
-router.delete('/:id', verifyToken, async (req, res) => {
+router.delete('/:id', verifyToken, async (req, res, next) => {
   const { id } = req.params;
 
   try {
-    const conn = await pool.getConnection();
-
-    const [result] = await conn.query('DELETE FROM quests WHERE id = ?', [id]);
-
-    conn.release();
+    const [result] = await pool.query('DELETE FROM quests WHERE id = ?', [id]);
 
     if (result.affectedRows === 0) {
-      return res.status(404).json({ error: 'Quest not found' });
+      throw new NotFoundError('Quest not found');
     }
 
     res.json({ message: 'Quest deleted successfully' });
   } catch (err) {
-    console.error('Error deleting quest:', err);
-    res.status(500).json({ error: 'Failed to delete quest' });
+    next(err);
   }
 });
 

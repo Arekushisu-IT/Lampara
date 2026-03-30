@@ -1,6 +1,5 @@
 const express = require('express');
 const cors = require('cors');
-const bodyParser = require('body-parser');
 require('dotenv').config();
 
 const pool = require('./db');
@@ -16,8 +15,9 @@ const PORT = process.env.PORT || 8080;
 // MIDDLEWARE
 // ============================================================
 
-app.use(bodyParser.json({ limit: '50mb' }));
-app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
+// Express has built-in JSON and URL parsing (no need for body-parser)
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 app.use(cors({
   origin: [
