@@ -6,7 +6,10 @@ const jwt = require('jsonwebtoken');
 const pool = require('../../db'); 
 
 const transporter = nodemailer.createTransport({
-  service: 'gmail',
+  host: 'smtp.gmail.com',
+  port: 587,
+  secure: false, // true for 465, false for other ports like 587
+  requireTLS: true, // Force TLS
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.MAIL_PASSWORD
@@ -175,7 +178,8 @@ const playerRegister = async (req, res) => {
       try {
         const verifyUrl = `${process.env.FRONTEND_URL}/verify.html?token=${token}`;
 
-        await transporter.sendMail({
+        // Send the email in the background (DO NOT await it) so Unity doesn't freeze!
+        transporter.sendMail({
           from: `"LAMPARA Archive" <${process.env.EMAIL_USER}>`,
           to: email,
           subject: '⚜ Verify Your Lampara Account',
@@ -193,9 +197,11 @@ const playerRegister = async (req, res) => {
               <p style="font-size:11px;color:#6b5740;">This link expires in 24 hours.<br>STI College General Santos · BSIT Capstone 2026</p>
             </div>
           `
+        }).catch(emailErr => {
+          console.error('CRITICAL: Player saved to DB, but Email failed to send:', emailErr);
         });
-      } catch (emailErr) {
-        console.error('CRITICAL: Player saved to DB, but Email failed to send:', emailErr);
+      } catch (err) {
+        console.error('Email configuration error:', err);
       }
     }
 
