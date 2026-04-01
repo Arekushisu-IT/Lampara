@@ -154,4 +154,25 @@ router.delete('/:id', verifyToken, async (req, res, next) => {
   }
 });
 
+// Game Client: Update Tutorial Status
+router.post('/update-tutorial-status', verifyToken, async (req, res, next) => {
+  const { playerId } = req.body;
+  if (!playerId) return res.status(400).json({ error: 'Player ID required' });
+  
+  try {
+    const [result] = await pool.query(
+      'UPDATE players SET has_completed_tutorial = true WHERE id = ?',
+      [playerId]
+    );
+
+    if (result.affectedRows === 0) {
+      throw new NotFoundError('Player not found');
+    }
+
+    res.json({ message: 'Tutorial status updated to true' });
+  } catch (err) {
+    next(err);
+  }
+});
+
 module.exports = router;

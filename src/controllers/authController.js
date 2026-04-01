@@ -96,7 +96,12 @@ const playerLogin = async (req, res) => {
     return res.json({
       message: 'Login successful',
       token,
-      player: { id: player.id, name: player.name, username: player.username, email: player.email, level: player.level, experience: player.experience, status: player.status }
+      player: { 
+        id: player.id, name: player.name, username: player.username, email: player.email, 
+        level: player.level, experience: player.experience, status: player.status,
+        has_completed_tutorial: player.has_completed_tutorial,
+        current_quest_id: player.current_quest_id
+      }
     });
   } catch (err) {
     console.error('Player login error:', err);
