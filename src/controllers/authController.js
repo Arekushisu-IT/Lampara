@@ -169,9 +169,9 @@ const adminRegister = async (req, res) => {
 // ==========================================
 const playerRegister = async (req, res) => {
   try {
-    const { name, username, password, email } = req.body;
-    if (!name || !username || !password) {
-      return res.status(400).json({ error: 'Name, Username, and Password are required' });
+    const { name, username, password, email, age } = req.body;
+    if (!name || !username || !password || !age) {
+      return res.status(400).json({ error: 'Name, Username, Password, and Age are required' });
     }
 
     // Check if username is taken
@@ -191,9 +191,9 @@ const playerRegister = async (req, res) => {
     // Insert player as inactive with token
     await pool.query(
       `INSERT INTO players 
-       (name, username, password, email, level, experience, status, chapter, suspicion, verify_token, token_expires_at)
-       VALUES (?, ?, ?, ?, 1, 0, 'inactive', 1, 0, ?, ?)`,
-      [name, username, hashedPassword, email || null, token, expiresAt]
+       (name, username, password, email, age, level, experience, status, chapter, suspicion, verify_token, token_expires_at)
+       VALUES (?, ?, ?, ?, ?, 1, 0, 'inactive', 1, 0, ?, ?)`,
+      [name, username, hashedPassword, email || null, age, token, expiresAt]
     );
 
     // Send verification email if email provided

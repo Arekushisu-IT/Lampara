@@ -13,7 +13,7 @@ router.get('/', verifyToken, async (req, res, next) => {
   try {
     // Use pool.query() directly — no connection leak risk
     const [players] = await pool.query(
-      'SELECT id, name, username, email, level, experience, status, is_online, chapter, suspicion, created_at FROM players ORDER BY created_at DESC'
+      'SELECT id, name, username, email, age, level, experience, status, is_online, chapter, suspicion, created_at FROM players ORDER BY created_at DESC'
     );
 
     res.json({ 
@@ -82,7 +82,7 @@ router.post('/', verifyToken, [
 // Update player
 router.put('/:id', verifyToken, async (req, res, next) => {
   const { id } = req.params;
-  const { name, username, email, level, experience, status, is_online } = req.body;
+  const { name, username, email, age, level, experience, status, is_online } = req.body;
 
   try {
     let updateQuery = 'UPDATE players SET ';
@@ -100,6 +100,10 @@ router.put('/:id', verifyToken, async (req, res, next) => {
     if (email !== undefined) {
       updates.push('email = ?');
       values.push(email);
+    }
+    if (age !== undefined) {
+      updates.push('age = ?');
+      values.push(age);
     }
     if (level !== undefined) {
       updates.push('level = ?');
