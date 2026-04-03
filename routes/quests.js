@@ -12,7 +12,7 @@ const router = express.Router();
 router.get('/', verifyToken, async (req, res, next) => {
   try {
     const [quests] = await pool.query(
-      'SELECT q.id, q.chapter, q.title, q.description, q.status, (SELECT COUNT(*) FROM players p WHERE p.chapter = q.chapter) as player_count FROM quests q ORDER BY q.chapter, q.id'
+      'SELECT q.id, q.chapter, q.title, q.description, q.status, (SELECT COUNT(*) FROM players p WHERE p.current_quest_id = q.id) as player_count FROM quests q ORDER BY q.chapter, q.id'
     );
 
     res.json({ 
