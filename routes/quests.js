@@ -140,6 +140,28 @@ router.put('/:id', verifyToken, async (req, res, next) => {
   }
 });
 
+// Bulk update status for all sub quests under a chapter + main_quest
+router.put('/bulk-status/:chapter/:mainQuest', verifyToken, async (req, res, next) => {
+  const { chapter, mainQuest } = req.params;
+  const { status } = req.body;
+
+  if (!status) return res.status(400).json({ error: 'Status is required' });
+
+  try {
+    const [result] = await pool.query(
+      'UPDATE quests SET status = ? WHERE chapter = ? AND main_quest = ?',
+      [status, chapter, mainQuest]
+    );
+
+    res.json({
+      message: `${result.affectedRows} sub quests set to ${status}`,
+      affected: result.affectedRows
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Delete quest
 router.delete('/:id', verifyToken, async (req, res, next) => {
   const { id } = req.params;
