@@ -66,23 +66,22 @@ router.get('/:id', verifyToken, async (req, res, next) => {
   }
 });
 
-// Create new quest
+// Create single sub quest
 router.post('/', verifyToken, [
   body('chapter').notEmpty(),
-  body('title').notEmpty(),
-  body('description').notEmpty()
+  body('title').notEmpty()
 ], async (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({ errors: errors.array() });
   }
 
-  const { chapter, title, description, status = 'active' } = req.body;
+  const { chapter, main_quest = 1, sub_quest = 1, title, description = '', status = 'active' } = req.body;
 
   try {
     const [result] = await pool.query(
-      'INSERT INTO quests (chapter, title, description, status) VALUES (?, ?, ?, ?)',
-      [chapter, title, description, status]
+      'INSERT INTO quests (chapter, main_quest, sub_quest, title, description, status) VALUES (?, ?, ?, ?, ?, ?)',
+      [chapter, main_quest, sub_quest, title, description, status]
     );
 
     res.status(201).json({
@@ -90,6 +89,28 @@ router.post('/', verifyToken, [
       questId: result.insertId
     });
   } catch (err) {
+    if (err.code === 'ER_DUP_ENTRY') return res.status(400).json({ error: 'A quest with this Chapter/MainQuest/SubQuest already exists.' });
+    next(err);
+  }
+});
+
+// Batch-create a full Main Quest with 5 empty sub quests
+router.post('/batch-main-quest', verifyToken, async (req, res, next) => {
+  const { chapter, main_quest, status = 'standby' } = req.body;
+  if (!chapter || !main_quest) return res.status(400).json({ error: 'chapter and main_quest are required' });
+
+  try {
+    let created = 0;
+    for (let sq = 1; sq <= 5; sq++) {
+      await pool.query(
+        'INSERT INTO quests (chapter, main_quest, sub_quest, title, description, status) VALUES (?, ?, ?, ?, ?, ?)',
+        [chapter, main_quest, sq, `Standby`, `Awaiting storyboard content.`, status]
+      );
+      created++;
+    }
+    res.status(201).json({ message: `Main Quest ${main_quest} created with ${created} sub quests`, created });
+  } catch (err) {
+    if (err.code === 'ER_DUP_ENTRY') return res.status(400).json({ error: 'Some sub quests in this Main Quest already exist.' });
     next(err);
   }
 });
