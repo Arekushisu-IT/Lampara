@@ -170,8 +170,8 @@ const adminRegister = async (req, res) => {
 const playerRegister = async (req, res) => {
   try {
     const { name, username, password, email, age } = req.body;
-    if (!name || !username || !password || !age) {
-      return res.status(400).json({ error: 'Name, Username, Password, and Age are required' });
+    if (!name || !username || !password || !age || !email) {
+      return res.status(400).json({ error: 'Name, Username, Password, Email, and Age are required' });
     }
 
     // Check if username is taken
