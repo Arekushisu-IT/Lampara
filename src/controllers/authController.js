@@ -100,7 +100,9 @@ const playerLogin = async (req, res) => {
         id: player.id, name: player.name, username: player.username, email: player.email, 
         level: player.level, experience: player.experience, status: player.status,
         has_completed_tutorial: player.has_completed_tutorial,
-        current_quest_id: player.current_quest_id
+        current_main_quest: player.current_quest_id,
+        current_sub_quest: player.current_sub_quest,
+        chapter: player.chapter
       }
     });
   } catch (err) {
@@ -132,9 +134,20 @@ const playerLogout = async (req, res) => {
 const getMe = async (req, res) => {
   try {
     if (req.user.role === 'player') {
-      const [players] = await pool.query('SELECT id, username, name, email, level, experience, status FROM players WHERE id = ?', [req.user.id]);
+      const [players] = await pool.query('SELECT id, username, name, email, level, experience, status, has_completed_tutorial, current_quest_id, current_sub_quest, chapter FROM players WHERE id = ?', [req.user.id]);
       if (players.length === 0) return res.status(401).json({ error: 'Player not found' });
-      return res.json({ user: players[0] });
+      
+      const player = players[0];
+      return res.json({ 
+        user: {
+          id: player.id, name: player.name, username: player.username, email: player.email, 
+          level: player.level, experience: player.experience, status: player.status,
+          has_completed_tutorial: player.has_completed_tutorial,
+          current_main_quest: player.current_quest_id,
+          current_sub_quest: player.current_sub_quest,
+          chapter: player.chapter
+        }
+      });
     } else {
       const [users] = await pool.query('SELECT id, email, name, role, status FROM Admin_User WHERE id = ?', [req.user.id]);
       if (users.length === 0) return res.status(401).json({ error: 'User not found' });

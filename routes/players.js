@@ -13,7 +13,7 @@ router.get('/', verifyToken, async (req, res, next) => {
   try {
     // Use pool.query() directly — no connection leak risk
     const [players] = await pool.query(
-      'SELECT id, name, username, email, age, level, experience, status, is_online, chapter, suspicion, created_at FROM players ORDER BY created_at DESC'
+      'SELECT id, name, username, email, age, level, experience, status, is_online, chapter, suspicion, current_quest_id, current_sub_quest, created_at FROM players ORDER BY created_at DESC'
     );
 
     res.json({ 
@@ -174,6 +174,30 @@ router.post('/update-tutorial-status', verifyToken, async (req, res, next) => {
     }
 
     res.json({ message: 'Tutorial status updated to true' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Game Client: Update Quest Status
+router.post('/update-quest-status', verifyToken, async (req, res, next) => {
+  const { playerId, currentMainQuest, currentSubQuest } = req.body;
+  
+  if (!playerId || currentMainQuest === undefined || currentSubQuest === undefined) {
+    return res.status(400).json({ error: 'playerId, currentMainQuest, and currentSubQuest are required' });
+  }
+  
+  try {
+    const [result] = await pool.query(
+      'UPDATE players SET current_quest_id = ?, current_sub_quest = ? WHERE id = ?',
+      [currentMainQuest, currentSubQuest, playerId]
+    );
+
+    if (result.affectedRows === 0) {
+      throw new NotFoundError('Player not found');
+    }
+
+    res.json({ message: 'Quest status updated successfully' });
   } catch (err) {
     next(err);
   }
