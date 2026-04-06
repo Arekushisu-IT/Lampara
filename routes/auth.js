@@ -50,8 +50,8 @@ router.post('/verify', registrationLimiter, verifyPlayer);
 // Username availability check (moderate rate limiting)
 router.post('/check-username', registrationLimiter, checkUsername);
 
-// Player logout (no rate limiting needed)
-router.post('/player-logout', playerLogout);
+// Player logout (requires auth to prevent spoofed logouts)
+router.post('/player-logout', verifyToken, playerLogout);
 
 // Status check (moderate rate limiting)
 router.post('/check-status', registrationLimiter, checkStatus);

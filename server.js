@@ -140,7 +140,7 @@ async function startServer() {
 
     // Ensure essential tables exist; if not, attempt to initialize schema
     try {
-      const [rows] = await pool.query("SHOW TABLES LIKE 'users'");
+      const [rows] = await pool.query("SHOW TABLES LIKE 'Admin_User'");
       if (!rows || rows.length === 0) {
         console.warn('⚠ Required tables not found. Running database initializer...');
         const { exec } = require('child_process');

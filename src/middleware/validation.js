@@ -31,7 +31,18 @@ const validatePlayerRegister = [
 
   body('password')
     .notEmpty().withMessage('Password is required.')
-    .isLength({ min: 6 }).withMessage('Password must be at least 6 characters long.')
+    .isLength({ min: 8, max: 12 }).withMessage('Password must be between 8 and 12 characters long.'),
+
+  body('email')
+    .trim()
+    .notEmpty().withMessage('Email is required.')
+    .isEmail().withMessage('Invalid email format.')
+    .normalizeEmail(),
+
+  body('age')
+    .notEmpty().withMessage('Age is required.')
+    .isInt({ min: 10, max: 100 }).withMessage('Age must be between 10 and 100.')
+    .toInt()
 ];
 
 // ============================================================

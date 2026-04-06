@@ -116,8 +116,8 @@ const playerLogin = async (req, res) => {
 // ==========================================
 const playerLogout = async (req, res) => {
   try {
-    const { id } = req.body;
-    if (!id) return res.status(400).json({ error: 'Player ID required' });
+    // Use the authenticated user's ID from JWT (more secure than trusting req.body)
+    const id = req.user.id;
 
     // Turn them OFFLINE safely
     await pool.query('UPDATE players SET is_online = false WHERE id = ?', [id]);
