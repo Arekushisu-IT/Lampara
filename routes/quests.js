@@ -1,10 +1,11 @@
 const express = require('express');
-const { validationResult, body } = require('express-validator');
+const { validationResult } = require('express-validator');
 const pool = require('../db');
 
 // Use the SHARED middleware instead of a copy-paste
 const verifyToken = require('../src/middleware/auth');
 const { NotFoundError, ValidationError } = require('../src/utils/errors');
+const { validateQuestCreate, validateQuestUpdate, validate } = require('../src/middleware/validation');
 
 const router = express.Router();
 
@@ -17,9 +18,9 @@ router.get('/', verifyToken, async (req, res, next) => {
        FROM quests q ORDER BY q.chapter, q.main_quest, q.sub_quest`
     );
 
-    res.json({ 
+    res.json({
       count: quests.length,
-      quests 
+      quests
     });
   } catch (err) {
     next(err);
@@ -36,10 +37,10 @@ router.get('/chapter/:chapter', verifyToken, async (req, res, next) => {
       [chapter]
     );
 
-    res.json({ 
+    res.json({
       chapter,
       count: quests.length,
-      quests 
+      quests
     });
   } catch (err) {
     next(err);
@@ -66,16 +67,8 @@ router.get('/:id', verifyToken, async (req, res, next) => {
   }
 });
 
-// Create single sub quest
-router.post('/', verifyToken, [
-  body('chapter').notEmpty(),
-  body('title').notEmpty()
-], async (req, res, next) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
-  }
-
+// Create single sub quest (with validation)
+router.post('/', verifyToken, validateQuestCreate, validate, async (req, res, next) => {
   const { chapter, main_quest = 1, sub_quest = 1, title, description = '', status = 'active' } = req.body;
 
   try {
@@ -115,8 +108,8 @@ router.post('/batch-main-quest', verifyToken, async (req, res, next) => {
   }
 });
 
-// Update quest
-router.put('/:id', verifyToken, async (req, res, next) => {
+// Update quest (with validation)
+router.put('/:id', verifyToken, validateQuestUpdate, validate, async (req, res, next) => {
   const { id } = req.params;
   const { chapter, title, description, status } = req.body;
 

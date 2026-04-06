@@ -161,16 +161,16 @@ const getMe = async (req, res) => {
 };
 
 // ==========================================
-// ADMIN REGISTER
+// ADMIN REGISTER (Always creates 'admin' role)
 // ==========================================
 const adminRegister = async (req, res) => {
   try {
-    const { email, password, name, role } = req.body;
+    const { email, password, name } = req.body;
     if (!email || !password || !name) return res.status(400).json({ error: 'Email, password, and name required' });
 
     const hashedPassword = await bcryptjs.hash(password, 10);
-    await pool.query('INSERT INTO Admin_User (email, password, name, role, status) VALUES (?, ?, ?, ?, ?)', [email, hashedPassword, name, role || 'staff', 'active']);
-    res.status(201).json({ message: 'User registered successfully' });
+    await pool.query('INSERT INTO Admin_User (email, password, name, role, status) VALUES (?, ?, ?, ?, ?)', [email, hashedPassword, name, 'admin', 'active']);
+    res.status(201).json({ message: 'Admin registered successfully' });
   } catch (err) {
     if (err.code === 'ER_DUP_ENTRY') return res.status(400).json({ error: 'Email already exists' });
     res.status(500).json({ error: 'Registration failed' });

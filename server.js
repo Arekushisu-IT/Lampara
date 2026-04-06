@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const rateLimit = require('express-rate-limit');
 require('dotenv').config();
 
 const pool = require('./db');
@@ -12,6 +13,47 @@ const app = express();
 const PORT = process.env.PORT || 8080;
 
 // ============================================================
+// ENVIRONMENT VALIDATION
+// ============================================================
+
+if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'your_super_secret_key_here') {
+  console.error('✗ JWT_SECRET is not configured properly.');
+  console.error('  Please set a strong JWT_SECRET in your .env file (minimum 64 characters).');
+  process.exit(1);
+}
+
+// ============================================================
+// RATE LIMITING CONFIGURATION
+// ============================================================
+
+// General API rate limit: 100 requests per 15 minutes
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  message: { error: 'Too many requests. Please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+// Strict rate limit for login endpoints: 10 requests per 15 minutes
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: { error: 'Too many login attempts. Please try again after 15 minutes.' },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+// Strict rate limit for registration/verification: 5 requests per 15 minutes
+const registrationLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: { error: 'Too many registration/verification attempts. Please try again after 15 minutes.' },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+// ============================================================
 // MIDDLEWARE
 // ============================================================
 
@@ -19,16 +61,18 @@ const PORT = process.env.PORT || 8080;
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
+// Apply general rate limit to all API routes
+app.use('/api', generalLimiter);
+
 app.use(cors({
   origin: [
     'http://localhost:3000',
     'http://localhost',
     'http://127.0.0.1:5500',
-    'file://',
-    'https://lampara-capstone.netlify.app', 
+    'https://lampara-capstone.netlify.app',
     process.env.FRONTEND_URL || 'http://localhost:3000',
     process.env.FRONTEND_URL_PROD || 'https://yourdomain.com'
-  ],
+  ].filter(Boolean),
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']

@@ -1,10 +1,11 @@
 const express = require('express');
-const { validationResult, body } = require('express-validator');
+const { validationResult } = require('express-validator');
 const pool = require('../db');
 
 // Use the SHARED middleware instead of a copy-paste
 const verifyToken = require('../src/middleware/auth');
 const { NotFoundError, ValidationError } = require('../src/utils/errors');
+const { validatePlayerCreate, validatePlayerUpdate, validate } = require('../src/middleware/validation');
 
 const router = express.Router();
 
@@ -45,17 +46,9 @@ router.get('/:id', verifyToken, async (req, res, next) => {
   }
 });
 
-// Create new player from Admin Panel
-router.post('/', verifyToken, [
-  body('name').notEmpty(),
-  body('username').notEmpty()
-], async (req, res, next) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
-  }
-
-  const { name, username, email, level = 1, experience = 0, status = 'active' } = req.body;
+// Create new player from Admin Panel (with validation)
+router.post('/', verifyToken, validatePlayerCreate, validate, async (req, res, next) => {
+  const { name, username, email, age, level = 1, experience = 0, status = 'active' } = req.body;
 
   try {
     // Default password for players created manually by admin
@@ -63,8 +56,8 @@ router.post('/', verifyToken, [
     const hashedPassword = await bcryptjs.hash('lampara123', 10);
 
     const [result] = await pool.query(
-      'INSERT INTO players (name, username, password, email, level, experience, status, is_online) VALUES (?, ?, ?, ?, ?, ?, ?, false)',
-      [name, username, hashedPassword, email || null, level, experience, status]
+      'INSERT INTO players (name, username, password, email, age, level, experience, status, is_online) VALUES (?, ?, ?, ?, ?, ?, ?, ?, false)',
+      [name, username, hashedPassword, email || null, age || null, level, experience, status]
     );
 
     res.status(201).json({
@@ -79,8 +72,8 @@ router.post('/', verifyToken, [
   }
 });
 
-// Update player
-router.put('/:id', verifyToken, async (req, res, next) => {
+// Update player (with validation)
+router.put('/:id', verifyToken, validatePlayerUpdate, validate, async (req, res, next) => {
   const { id } = req.params;
   const { name, username, email, age, level, experience, status, is_online } = req.body;
 
