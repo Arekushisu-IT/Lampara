@@ -70,6 +70,7 @@ app.use(cors({
     'http://localhost',
     'http://127.0.0.1:5500',
     'https://lampara-capstone.netlify.app',
+    'https://lampara2026.netlify.app',
     process.env.FRONTEND_URL || 'http://localhost:3000',
     process.env.FRONTEND_URL_PROD || 'https://yourdomain.com'
   ].filter(Boolean),
