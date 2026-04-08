@@ -67,6 +67,27 @@ router.get('/:id', verifyToken, async (req, res, next) => {
   }
 });
 
+// Get quest by chapter and main_quest (for Unity client)
+router.get('/chapter/:chapter/main/:mainQuest', verifyToken, async (req, res, next) => {
+  const { chapter, mainQuest } = req.params;
+
+  try {
+    const [quests] = await pool.query(
+      'SELECT * FROM quests WHERE chapter = ? AND main_quest = ? ORDER BY sub_quest',
+      [chapter, mainQuest]
+    );
+
+    res.json({
+      chapter: parseInt(chapter),
+      main_quest: parseInt(mainQuest),
+      count: quests.length,
+      quests
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Create single sub quest (with validation)
 router.post('/', verifyToken, validateQuestCreate, validate, async (req, res, next) => {
   const { chapter, main_quest = 1, sub_quest = 1, title, description = '', status = 'active' } = req.body;

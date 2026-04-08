@@ -200,12 +200,12 @@ router.post('/update-quest-status', verifyToken, async (req, res, next) => {
 // ==========================================
 router.post('/:id/complete-quest', verifyToken, async (req, res, next) => {
   const { id } = req.params; // The Player's ID
-  const { quest_id, xp_reward, advance_to_chapter } = req.body;
+  const { currentMainQuest, currentSubQuest, quest_id, xp_reward, advance_to_chapter } = req.body;
 
   try {
     // 1. Log the quest as 'completed' in the player_quests table
     await pool.query(
-      `INSERT INTO player_quests (player_id, quest_id, status, progress_percent, completed_at) 
+      `INSERT INTO player_quests (player_id, quest_id, status, progress_percent, completed_at)
        VALUES (?, ?, 'completed', 100, CURRENT_TIMESTAMP)
        ON DUPLICATE KEY UPDATE status = 'completed', progress_percent = 100, completed_at = CURRENT_TIMESTAMP`,
       [id, quest_id]
@@ -231,10 +231,10 @@ router.post('/:id/complete-quest', verifyToken, async (req, res, next) => {
       chapter = advance_to_chapter;
     }
 
-    // 5. Save the new stats back to the database
+    // 5. Update the player's current quest progression
     await pool.query(
-      'UPDATE players SET level = ?, experience = ?, chapter = ? WHERE id = ?',
-      [level, experience, chapter, id]
+      'UPDATE players SET current_quest_id = ?, current_sub_quest = ?, level = ?, experience = ?, chapter = ? WHERE id = ?',
+      [currentMainQuest, currentSubQuest, level, experience, chapter, id]
     );
 
     res.json({
