@@ -8,6 +8,8 @@ const authRoutes = require('./routes/auth');
 const logsRoutes = require('./routes/logs');
 const playersRoutes = require('./routes/players');
 const questsRoutes = require('./routes/quests');
+const gameConfigRoutes = require('./routes/gameConfig');
+const gameRoutes = require('./routes/game');
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -104,6 +106,12 @@ app.use('/api/players', playersRoutes);
 // Quests routes
 app.use('/api/quests', questsRoutes);
 
+// Game Config routes (Suspicion Meter settings)
+app.use('/api/game-config', gameConfigRoutes);
+
+// Game Client routes (Unity content endpoints)
+app.use('/api/game', gameRoutes);
+
 // Root
 app.get('/', (req, res) => {
   res.json({
@@ -138,29 +146,6 @@ async function startServer() {
     // Test database connection
     await pool.query('SELECT 1');
     console.log('✓ MySQL Database Connected Successfully');
-
-    // Ensure essential tables exist; if not, attempt to initialize schema
-    try {
-      const [rows] = await pool.query("SHOW TABLES LIKE 'Admin_User'");
-      if (!rows || rows.length === 0) {
-        console.warn('⚠ Required tables not found. Running database initializer...');
-        const { exec } = require('child_process');
-        const path = require('path');
-        const initScript = path.join(__dirname, 'init-db-deploy.js');
-
-        exec(`node "${initScript}"`, { cwd: __dirname }, (err, stdout, stderr) => {
-          if (err) {
-            console.error('✗ Database initializer failed:', err.message);
-            if (stderr) console.error(stderr);
-            return;
-          }
-          console.log(stdout);
-          console.log('✓ Database initialized by init-db-deploy.js');
-        });
-      }
-    } catch (checkErr) {
-      console.warn('Could not verify tables:', checkErr.message);
-    }
   } catch (err) {
     console.error('✗ Database Connection Error:', err.message);
   }

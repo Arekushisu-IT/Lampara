@@ -3,6 +3,7 @@ const pool = require('../db');
 
 // Add authentication — logs should only be accessible to logged-in admins
 const verifyToken = require('../src/middleware/auth');
+const authorize = require('../src/middleware/authorize');
 
 const router = express.Router();
 
@@ -10,15 +11,28 @@ const router = express.Router();
  * GET /api/logs
  * Now protected — only authenticated users can read activity logs
  */
-router.get('/', verifyToken, async (req, res) => {
+router.get('/', verifyToken, authorize('admin', 'staff'), async (req, res, next) => {
+  const { page = 1, limit = 50 } = req.query;
+  const offset = (parseInt(page) - 1) * parseInt(limit);
+
   try {
     const [logs] = await pool.query(
-      'SELECT * FROM activity_logs ORDER BY timestamp DESC LIMIT 100'
+      'SELECT * FROM activity_logs ORDER BY timestamp DESC LIMIT ? OFFSET ?',
+      [parseInt(limit), offset]
     );
-    res.json(logs);
+    const [[{ total }]] = await pool.query('SELECT COUNT(*) as total FROM activity_logs');
+
+    res.json({
+      logs,
+      pagination: {
+        total,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        totalPages: Math.ceil(total / parseInt(limit))
+      }
+    });
   } catch (err) {
-    console.error('Get logs error:', err);
-    res.status(500).json({ error: 'Failed to fetch logs' });
+    next(err);
   }
 });
 
@@ -27,7 +41,7 @@ router.get('/', verifyToken, async (req, res) => {
  * Now protected — uses the logged-in user's ID from their JWT token
  * instead of defaulting to user_id = 1
  */
-router.post('/', verifyToken, async (req, res) => {
+router.post('/', verifyToken, async (req, res, next) => {
   try {
     const { action, description } = req.body;
 
@@ -45,8 +59,7 @@ router.post('/', verifyToken, async (req, res) => {
 
     res.status(201).json({ message: 'Log created' });
   } catch (err) {
-    console.error('Log create error:', err);
-    res.status(500).json({ error: 'Failed to create log' });
+    next(err);
   }
 });
 
