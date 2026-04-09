@@ -52,10 +52,26 @@ router.post('/', verifyToken, async (req, res, next) => {
     // Use the authenticated user's ID from the JWT token
     const userId = req.user.id;
 
-    await pool.query(
-      'INSERT INTO activity_logs (user_id, action, description) VALUES (?, ?, ?)',
-      [userId, action, description || '']
-    );
+    // Capture real IP (works behind Railway's reverse proxy)
+    const ipAddress = req.ip || req.connection.remoteAddress || '0.0.0.0';
+
+    // Attempt to insert with ip_address; fall back if column doesn't exist yet
+    try {
+      await pool.query(
+        'INSERT INTO activity_logs (user_id, action, description, ip_address) VALUES (?, ?, ?, ?)',
+        [userId, action, description || '', ipAddress]
+      );
+    } catch (colErr) {
+      // If ip_address column doesn't exist, insert without it
+      if (colErr.code === 'ER_BAD_FIELD_ERROR') {
+        await pool.query(
+          'INSERT INTO activity_logs (user_id, action, description) VALUES (?, ?, ?)',
+          [userId, action, description || '']
+        );
+      } else {
+        throw colErr;
+      }
+    }
 
     res.status(201).json({ message: 'Log created' });
   } catch (err) {

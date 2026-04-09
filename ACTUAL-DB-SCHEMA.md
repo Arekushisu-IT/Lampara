@@ -3,7 +3,7 @@
 # Source: Railway MySQL (shortline.proxy.rlwy.net:20695)
 
 # ============================================================
-# TABLES (5 total)
+# TABLES (7 total — all confirmed present)
 # ============================================================
 
 # 1. Admin_User (1 row)
@@ -83,8 +83,38 @@
 # description         | text                              |
 # timestamp           | timestamp                         |
 
+# 6. quest_dialogues (3 rows)
+# ----------------------------------------------------------
+# Column              | Type                              | Notes
+# --------------------|-----------------------------------|---------------------------
+# id                  | int (PK, AI)                      |
+# quest_id            | int                               | FK → quests.id (CASCADE delete)
+# sequence_order      | int                               | UNIQUE(quest_id, sequence_order)
+# npc_name            | varchar(100)                      | default 'NPC'
+# npc_text            | text                              |
+# option_a_text       | text                              |
+# option_b_text       | text                              |
+# option_a_correct    | tinyint(1)                        | default 0
+# option_b_correct    | tinyint(1)                        | default 1
+# suspicion_penalty   | int                               | default 10
+# context_notes       | text                              |
+# created_at          | timestamp                         |
+# updated_at          | timestamp                         |
+
+# 7. game_config (6 rows)
+# ----------------------------------------------------------
+# Column              | Type                              | Notes
+# --------------------|-----------------------------------|---------------------------
+# id                  | int (PK, AI)                      |
+# config_key          | varchar(100)                      | UNIQUE
+# config_value        | varchar(255)                      |
+# description         | text                              |
+# updated_at          | timestamp                         |
+
+# Seed values:
+#   suspicion_start, suspicion_wrong_penalty, suspicion_streak_bonus,
+#   suspicion_streak_threshold, suspicion_max, max_conversations
+
 # ============================================================
-# MISSING TABLES (referenced in code but NOT in DB)
+# ALL TABLES CONFIRMED ✅ — Code and DB are in sync
 # ============================================================
-# ⚠ quest_dialogues  — Code reads/writes this table but it doesn't exist
-# ⚠ game_config      — Code reads/writes this table but it doesn't exist

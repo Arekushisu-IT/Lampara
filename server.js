@@ -37,27 +37,15 @@ const generalLimiter = rateLimit({
   legacyHeaders: false
 });
 
-// Strict rate limit for login endpoints: 10 requests per 15 minutes
-const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 10,
-  message: { error: 'Too many login attempts. Please try again after 15 minutes.' },
-  standardHeaders: true,
-  legacyHeaders: false
-});
-
-// Strict rate limit for registration/verification: 5 requests per 15 minutes
-const registrationLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 5,
-  message: { error: 'Too many registration/verification attempts. Please try again after 15 minutes.' },
-  standardHeaders: true,
-  legacyHeaders: false
-});
+// Note: Login and registration rate limiters are defined in routes/auth.js
+// and applied per-endpoint for granular control.
 
 // ============================================================
 // MIDDLEWARE
 // ============================================================
+
+// Trust Railway's reverse proxy for real IP addresses
+app.set('trust proxy', true);
 
 // Express has built-in JSON and URL parsing (no need for body-parser)
 app.use(express.json({ limit: '10mb' }));
