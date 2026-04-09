@@ -62,8 +62,10 @@ app.use(cors({
     'http://127.0.0.1:5500',
     'https://lampara-capstone.netlify.app',
     'https://lampara2026.netlify.app',
+    'https://lampara.life',
+    'https://api.lampara.life',
     process.env.FRONTEND_URL || 'http://localhost:3000',
-    process.env.FRONTEND_URL_PROD || 'https://yourdomain.com'
+    process.env.FRONTEND_URL_PROD || 'https://lampara.life'
   ].filter(Boolean),
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
