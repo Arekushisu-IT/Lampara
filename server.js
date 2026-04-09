@@ -45,7 +45,8 @@ const generalLimiter = rateLimit({
 // ============================================================
 
 // Trust Railway's reverse proxy for real IP addresses
-app.set('trust proxy', true);
+// Use '1' to trust exactly one proxy hop (Railway's load balancer)
+app.set('trust proxy', 1);
 
 // Express has built-in JSON and URL parsing (no need for body-parser)
 app.use(express.json({ limit: '10mb' }));
