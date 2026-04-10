@@ -267,29 +267,66 @@ const checkUsername = async (req, res, next) => {
 // ==========================================
 const verifyPlayer = async (req, res, next) => {
   const { token } = req.body;
-  if (!token) return res.status(400).json({ error: 'Token required' });
+  
+  console.log('🔐 [VERIFY] Request received');
+  console.log('🔐 [VERIFY] Token present:', !!token);
+  if (token) {
+    console.log('🔐 [VERIFY] Token length:', token.length);
+    console.log('🔐 [VERIFY] Token preview:', token.substring(0, 20) + '...');
+  }
+
+  if (!token) {
+    console.warn('❌ [VERIFY] No token provided in request body');
+    return res.status(400).json({ error: 'Token required' });
+  }
 
   try {
+    console.log('🔍 [VERIFY] Querying database for token...');
     const [rows] = await pool.query(
       'SELECT id, name, email, status, token_expires_at FROM players WHERE verify_token = ?',
       [token]
     );
 
-    if (rows.length === 0) return res.status(404).json({ error: 'Invalid token' });
-    if (rows[0].status === 'active') return res.status(409).json({ error: 'Already verified' });
-    if (new Date() > new Date(rows[0].token_expires_at)) return res.status(410).json({ error: 'Link expired' });
+    console.log(' [VERIFY] Database result count:', rows.length);
 
+    if (rows.length === 0) {
+      console.warn('❌ [VERIFY] No player found with this token');
+      return res.status(404).json({ error: 'Invalid token' });
+    }
+
+    const player = rows[0];
+    console.log('✅ [VERIFY] Player found:', { id: player.id, name: player.name, status: player.status });
+
+    if (player.status === 'active') {
+      console.log('ℹ️  [VERIFY] Player already verified');
+      return res.status(409).json({ error: 'Already verified' });
+    }
+
+    const now = new Date();
+    const expiresAt = new Date(player.token_expires_at);
+    console.log('⏰ [VERIFY] Current time:', now.toISOString());
+    console.log('⏰ [VERIFY] Token expires at:', expiresAt.toISOString());
+    console.log('⏰ [VERIFY] Is expired:', now > expiresAt);
+
+    if (now > expiresAt) {
+      console.warn('⏳ [VERIFY] Token has expired');
+      return res.status(410).json({ error: 'Link expired' });
+    }
+
+    console.log('✨ [VERIFY] Activating player account...');
     await pool.query(
       'UPDATE players SET status = "active", verify_token = NULL, token_expires_at = NULL WHERE id = ?',
-      [rows[0].id]
+      [player.id]
     );
 
+    console.log('✅ [VERIFY] Account verified successfully:', player.email);
     res.json({
       message: 'Verified!',
-      user: { name: rows[0].name, email: rows[0].email }
+      user: { name: player.name, email: player.email }
     });
 
   } catch (err) {
+    console.error('❌ [VERIFY] Error during verification:', err);
     next(err);
   }
 };
