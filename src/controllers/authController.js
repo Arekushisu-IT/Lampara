@@ -267,7 +267,7 @@ const checkUsername = async (req, res, next) => {
 // ==========================================
 const verifyPlayer = async (req, res, next) => {
   const { token } = req.body;
-  
+
   console.log('🔐 [VERIFY] Request received');
   console.log('🔐 [VERIFY] Token present:', !!token);
   if (token) {
@@ -281,6 +281,7 @@ const verifyPlayer = async (req, res, next) => {
   }
 
   try {
+    // Find player by verification token
     console.log('🔍 [VERIFY] Querying database for token...');
     const [rows] = await pool.query(
       'SELECT id, name, email, status, token_expires_at FROM players WHERE verify_token = ?',
@@ -290,18 +291,23 @@ const verifyPlayer = async (req, res, next) => {
     console.log(' [VERIFY] Database result count:', rows.length);
 
     if (rows.length === 0) {
-      console.warn('❌ [VERIFY] No player found with this token');
+      console.log('❌ [VERIFY] No player found with this token');
       return res.status(404).json({ error: 'Invalid token' });
     }
 
     const player = rows[0];
     console.log('✅ [VERIFY] Player found:', { id: player.id, name: player.name, status: player.status });
 
+    // Check if already verified
     if (player.status === 'active') {
-      console.log('ℹ️  [VERIFY] Player already verified');
-      return res.status(409).json({ error: 'Already verified' });
+      console.log('ℹ️  [VERIFY] Player already verified - returning user info');
+      return res.status(409).json({
+        error: 'Already verified',
+        user: { name: player.name, email: player.email }
+      });
     }
 
+    // Check if token expired
     const now = new Date();
     const expiresAt = new Date(player.token_expires_at);
     console.log('⏰ [VERIFY] Current time:', now.toISOString());
@@ -313,9 +319,10 @@ const verifyPlayer = async (req, res, next) => {
       return res.status(410).json({ error: 'Link expired' });
     }
 
+    // Verify the account (keep the token for future "already verified" checks)
     console.log('✨ [VERIFY] Activating player account...');
     await pool.query(
-      'UPDATE players SET status = "active", verify_token = NULL, token_expires_at = NULL WHERE id = ?',
+      'UPDATE players SET status = "active" WHERE id = ?',
       [player.id]
     );
 
