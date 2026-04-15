@@ -15,7 +15,7 @@ router.get('/quest-content/:chapter/:quest/:subquest', verifyToken, async (req, 
   try {
     // 1. Find the quest record
     const [quests] = await pool.query(
-      'SELECT id, chapter, main_quest, sub_quest, title, description, status FROM quests WHERE chapter = ? AND main_quest = ? AND sub_quest = ?',
+      'SELECT id, chapter, main_quest, sub_quest, title, description, artifact_resource_path, status FROM quests WHERE chapter = ? AND main_quest = ? AND sub_quest = ?',
       [chapter, quest, subquest]
     );
 
@@ -27,10 +27,10 @@ router.get('/quest-content/:chapter/:quest/:subquest', verifyToken, async (req, 
 
     // 2. Fetch all dialogues for this sub-quest
     const [dialogues] = await pool.query(
-      `SELECT id, sequence_order, npc_name, npc_text, option_a_text, option_b_text, 
-              option_a_correct, option_b_correct, suspicion_penalty
-       FROM quest_dialogues 
-       WHERE quest_id = ? 
+      `SELECT id, sequence_order, npc_name, npc_text, option_a_text, option_b_text, option_c_text,
+              option_a_correct, option_b_correct, option_c_correct, suspicion_penalty
+       FROM quest_dialogues
+       WHERE quest_id = ?
        ORDER BY sequence_order`,
       [questData.id]
     );
@@ -43,6 +43,7 @@ router.get('/quest-content/:chapter/:quest/:subquest', verifyToken, async (req, 
         sub_quest: questData.sub_quest,
         title: questData.title,
         description: questData.description,
+        artifact_resource_path: questData.artifact_resource_path,
         status: questData.status
       },
       dialogues,

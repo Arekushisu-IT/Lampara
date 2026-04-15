@@ -14,7 +14,7 @@ const router = express.Router();
 router.get('/', verifyToken, authorize('admin', 'staff'), async (req, res, next) => {
   try {
     const [quests] = await pool.query(
-      `SELECT q.id, q.chapter, q.main_quest, q.sub_quest, q.title, q.description, q.status,
+      `SELECT q.id, q.chapter, q.main_quest, q.sub_quest, q.title, q.description, q.artifact_resource_path, q.status,
        (SELECT COUNT(*) FROM players p WHERE p.current_quest_id = q.id) as player_count
        FROM quests q ORDER BY q.chapter, q.main_quest, q.sub_quest`
     );
@@ -133,7 +133,7 @@ router.post('/batch-main-quest', verifyToken, authorize('admin', 'staff'), async
 // Update quest (with validation)
 router.put('/:id', verifyToken, authorize('admin', 'staff'), validateQuestUpdate, validate, async (req, res, next) => {
   const { id } = req.params;
-  const { chapter, title, description, status } = req.body;
+  const { chapter, title, description, artifact_resource_path, status } = req.body;
 
   try {
     let updateQuery = 'UPDATE quests SET ';
@@ -151,6 +151,10 @@ router.put('/:id', verifyToken, authorize('admin', 'staff'), validateQuestUpdate
     if (description !== undefined) {
       updates.push('description = ?');
       values.push(description);
+    }
+    if (artifact_resource_path !== undefined) {
+      updates.push('artifact_resource_path = ?');
+      values.push(artifact_resource_path);
     }
     if (status !== undefined) {
       updates.push('status = ?');
@@ -225,11 +229,11 @@ router.get('/:id/dialogues', verifyToken, authorize('admin', 'staff'), async (re
 
   try {
     const [dialogues] = await pool.query(
-      `SELECT id, quest_id, sequence_order, npc_name, npc_text, 
-              option_a_text, option_b_text, option_a_correct, option_b_correct,
+      `SELECT id, quest_id, sequence_order, npc_name, npc_text,
+              option_a_text, option_b_text, option_c_text, option_a_correct, option_b_correct, option_c_correct,
               suspicion_penalty, context_notes, created_at, updated_at
-       FROM quest_dialogues 
-       WHERE quest_id = ? 
+       FROM quest_dialogues
+       WHERE quest_id = ?
        ORDER BY sequence_order`,
       [id]
     );
@@ -253,8 +257,10 @@ router.post('/:id/dialogues', verifyToken, authorize('admin', 'staff'), async (r
     npc_text,
     option_a_text,
     option_b_text,
+    option_c_text,
     option_a_correct = 0,
     option_b_correct = 1,
+    option_c_correct = 0,
     suspicion_penalty = 10,
     context_notes = ''
   } = req.body;
@@ -275,12 +281,12 @@ router.post('/:id/dialogues', verifyToken, authorize('admin', 'staff'), async (r
     }
 
     const [result] = await pool.query(
-      `INSERT INTO quest_dialogues 
-       (quest_id, sequence_order, npc_name, npc_text, option_a_text, option_b_text, 
-        option_a_correct, option_b_correct, suspicion_penalty, context_notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [id, seqOrder, npc_name, npc_text, option_a_text, option_b_text,
-       option_a_correct, option_b_correct, suspicion_penalty, context_notes]
+      `INSERT INTO quest_dialogues
+       (quest_id, sequence_order, npc_name, npc_text, option_a_text, option_b_text, option_c_text,
+        option_a_correct, option_b_correct, option_c_correct, suspicion_penalty, context_notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, seqOrder, npc_name, npc_text, option_a_text, option_b_text, option_c_text,
+       option_a_correct, option_b_correct, option_c_correct, suspicion_penalty, context_notes]
     );
 
     res.status(201).json({
@@ -299,8 +305,8 @@ router.post('/:id/dialogues', verifyToken, authorize('admin', 'staff'), async (r
 // Update a dialogue entry
 router.put('/dialogues/:dialogueId', verifyToken, authorize('admin', 'staff'), async (req, res, next) => {
   const { dialogueId } = req.params;
-  const { npc_name, npc_text, option_a_text, option_b_text,
-          option_a_correct, option_b_correct, suspicion_penalty, context_notes, sequence_order } = req.body;
+  const { npc_name, npc_text, option_a_text, option_b_text, option_c_text,
+          option_a_correct, option_b_correct, option_c_correct, suspicion_penalty, context_notes, sequence_order } = req.body;
 
   try {
     let updateQuery = 'UPDATE quest_dialogues SET ';
@@ -311,8 +317,10 @@ router.put('/dialogues/:dialogueId', verifyToken, authorize('admin', 'staff'), a
     if (npc_text !== undefined)        { updates.push('npc_text = ?');        values.push(npc_text); }
     if (option_a_text !== undefined)   { updates.push('option_a_text = ?');   values.push(option_a_text); }
     if (option_b_text !== undefined)   { updates.push('option_b_text = ?');   values.push(option_b_text); }
+    if (option_c_text !== undefined)   { updates.push('option_c_text = ?');   values.push(option_c_text); }
     if (option_a_correct !== undefined){ updates.push('option_a_correct = ?');values.push(option_a_correct); }
     if (option_b_correct !== undefined){ updates.push('option_b_correct = ?');values.push(option_b_correct); }
+    if (option_c_correct !== undefined){ updates.push('option_c_correct = ?');values.push(option_c_correct); }
     if (suspicion_penalty !== undefined){ updates.push('suspicion_penalty = ?');values.push(suspicion_penalty); }
     if (context_notes !== undefined)   { updates.push('context_notes = ?');   values.push(context_notes); }
     if (sequence_order !== undefined)  { updates.push('sequence_order = ?');  values.push(sequence_order); }

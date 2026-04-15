@@ -54,6 +54,7 @@
 # sub_quest           | int                               |
 # title               | varchar(255)                      |
 # description         | text                              |
+# artifact_resource_path| varchar(255)                    | nullable, AR artifact path
 # status              | enum('active','inactive','archived') |
 # created_at          | timestamp                         |
 # updated_at          | timestamp                         |
@@ -94,8 +95,10 @@
 # npc_text            | text                              |
 # option_a_text       | text                              |
 # option_b_text       | text                              |
+# option_c_text       | text                              | nullable, Option C text
 # option_a_correct    | tinyint(1)                        | default 0
 # option_b_correct    | tinyint(1)                        | default 1
+# option_c_correct    | tinyint(1)                        | default 0
 # suspicion_penalty   | int                               | default 10
 # context_notes       | text                              |
 # created_at          | timestamp                         |
