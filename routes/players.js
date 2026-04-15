@@ -60,7 +60,7 @@ router.post('/', verifyToken, authorize('admin', 'staff'), validatePlayerCreate,
 
     const [result] = await pool.query(
       'INSERT INTO players (name, username, password, email, birthdate, level, experience, status, is_online) VALUES (?, ?, ?, ?, ?, ?, ?, ?, false)',
-      [name, username, hashedPassword, email || null, birthdate || null, level, experience, status]
+      [name, username, hashedPassword, email || null, birthdate, level, experience, status]
     );
 
     res.status(201).json({

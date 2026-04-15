@@ -202,7 +202,7 @@ const playerRegister = async (req, res, next) => {
       `INSERT INTO players
        (name, username, password, email, birthdate, level, experience, status, chapter, suspicion, verify_token, token_expires_at)
        VALUES (?, ?, ?, ?, ?, 1, 0, 'inactive', 1, 0, ?, ?)`,
-      [name, username, hashedPassword, email || null, birthdate || null, token, expiresAt]
+      [name, username, hashedPassword, email || null, birthdate, token, expiresAt]
     );
 
     // Send verification email if email provided
