@@ -231,7 +231,7 @@ router.get('/:id/dialogues', verifyToken, authorize('admin', 'staff'), async (re
     const [dialogues] = await pool.query(
       `SELECT id, quest_id, sequence_order, npc_name, npc_text,
               option_a_text, option_b_text, option_c_text, option_a_correct, option_b_correct, option_c_correct,
-              suspicion_penalty, context_notes, created_at, updated_at
+              suspicion_penalty, artifact_resource_path, context_notes, created_at, updated_at
        FROM quest_dialogues
        WHERE quest_id = ?
        ORDER BY sequence_order`,
@@ -262,6 +262,7 @@ router.post('/:id/dialogues', verifyToken, authorize('admin', 'staff'), async (r
     option_b_correct = 1,
     option_c_correct = 0,
     suspicion_penalty = 10,
+    artifact_resource_path,
     context_notes = ''
   } = req.body;
 
