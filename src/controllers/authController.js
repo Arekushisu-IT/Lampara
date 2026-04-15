@@ -98,7 +98,7 @@ const playerLogin = async (req, res, next) => {
       player: {
         id: player.id, name: player.name, username: player.username, email: player.email,
         level: player.level, experience: player.experience, status: player.status,
-        has_completed_tutorial: player.has_completed_tutorial,
+        has_completed_tutorial: !!player.has_completed_tutorial,
         current_main_quest: player.current_quest_id,
         current_sub_quest: player.current_sub_quest,
         chapter: player.chapter
@@ -139,7 +139,7 @@ const getMe = async (req, res, next) => {
         user: {
           id: player.id, name: player.name, username: player.username, email: player.email,
           level: player.level, experience: player.experience, status: player.status,
-          has_completed_tutorial: player.has_completed_tutorial,
+          has_completed_tutorial: !!player.has_completed_tutorial,
           current_main_quest: player.current_quest_id,
           current_sub_quest: player.current_sub_quest,
           chapter: player.chapter
