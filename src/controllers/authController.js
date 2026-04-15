@@ -347,13 +347,13 @@ const checkStatus = async (req, res, next) => {
     if (!id) return res.status(400).json({ error: 'Player ID required' });
 
     const [rows] = await pool.query(
-      'SELECT status FROM players WHERE id = ?',
+      'SELECT status, has_completed_tutorial FROM players WHERE id = ?',
       [id]
     );
 
     if (rows.length === 0) return res.status(404).json({ error: 'Player not found' });
 
-    res.json({ status: rows[0].status });
+    res.json({ status: rows[0].status, has_completed_tutorial: !!rows[0].has_completed_tutorial });
   } catch (err) {
     next(err);
   }
