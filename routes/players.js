@@ -155,11 +155,34 @@ router.delete('/:id', verifyToken, authorize('admin'), async (req, res, next) =>
   }
 });
 
-// Game Client: Update Tutorial Status
-router.post('/update-tutorial-status', verifyToken, authorize('admin', 'staff'), async (req, res, next) => {
+// Game Client: Update Tutorial Status (player can update their own status)
+router.post('/update-tutorial-status', verifyToken, async (req, res, next) => {
   const { playerId } = req.body;
-  if (!playerId) return res.status(400).json({ error: 'Player ID required' });
+  
+  console.log('[DEBUG /update-tutorial-status] Request received');
+  console.log('[DEBUG] req.user:', JSON.stringify(req.user));
+  console.log('[DEBUG] Body playerId:', playerId, typeof playerId);
+  console.log('[DEBUG] JWT userId:', req.user.id, typeof req.user.id);
+  console.log('[DEBUG] JWT role:', req.user.role);
+  
+  if (!playerId) {
+    console.error('[ERROR] playerId is missing from request body');
+    return res.status(400).json({ error: 'Player ID required' });
+  }
 
+  // Security: Players can only update their own tutorial status
+  // Admin/staff can update any player's status
+  const userRole = req.user.role;
+  const userId = req.user.id;
+
+  // Convert both to numbers for safe comparison
+  if (userRole !== 'admin' && userRole !== 'staff' && Number(userId) !== Number(playerId)) {
+    console.warn(`[FORBIDDEN] userId (${userId}) !== playerId (${playerId})`);
+    return res.status(403).json({ error: 'Forbidden: cannot update another player\'s tutorial status' });
+  }
+
+  console.log(`[AUTH OK] Player ${playerId} authorized to update own tutorial status`);
+  
   try {
     const [result] = await pool.query(
       'UPDATE players SET has_completed_tutorial = true WHERE id = ?',
@@ -167,21 +190,32 @@ router.post('/update-tutorial-status', verifyToken, authorize('admin', 'staff'),
     );
 
     if (result.affectedRows === 0) {
+      console.error(`[ERROR] No player found with id ${playerId}`);
       throw new NotFoundError('Player not found');
     }
 
+    console.log(`[SUCCESS] Tutorial status updated for player ${playerId}`);
     res.json({ message: 'Tutorial status updated to true' });
   } catch (err) {
     next(err);
   }
 });
 
-// Game Client: Update Quest Status
-router.post('/update-quest-status', verifyToken, authorize('admin', 'staff'), async (req, res, next) => {
+// Game Client: Update Quest Status (player can update their own quest status)
+router.post('/update-quest-status', verifyToken, async (req, res, next) => {
   const { playerId, currentMainQuest, currentSubQuest } = req.body;
 
   if (!playerId || currentMainQuest === undefined || currentSubQuest === undefined) {
     return res.status(400).json({ error: 'playerId, currentMainQuest, and currentSubQuest are required' });
+  }
+
+  // Security: Players can only update their own quest status
+  // Admin/staff can update any player's status
+  const userRole = req.user.role;
+  const userId = req.user.id;
+
+  if (userRole !== 'admin' && userRole !== 'staff' && userId !== playerId) {
+    return res.status(403).json({ error: 'Forbidden: cannot update another player\'s quest status' });
   }
 
   try {
@@ -202,9 +236,18 @@ router.post('/update-quest-status', verifyToken, authorize('admin', 'staff'), as
 // ==========================================
 // POST: COMPLETE QUEST & ADD PROGRESSION
 // ==========================================
-router.post('/:id/complete-quest', verifyToken, authorize('admin', 'staff'), async (req, res, next) => {
+router.post('/:id/complete-quest', verifyToken, async (req, res, next) => {
   const { id } = req.params; // The Player's ID
   const { currentMainQuest, currentSubQuest, quest_id, xp_reward, advance_to_chapter } = req.body;
+
+  // Security: Players can only complete their own quests
+  // Admin/staff can complete any player's quest
+  const userRole = req.user.role;
+  const userId = req.user.id;
+
+  if (userRole !== 'admin' && userRole !== 'staff' && userId !== parseInt(id)) {
+    return res.status(403).json({ error: 'Forbidden: cannot complete another player\'s quest' });
+  }
 
   try {
     // 1. Log the quest as 'completed' in the player_quests table
