@@ -83,7 +83,7 @@ router.get('/quest-list/:chapter', verifyToken, async (req, res, next) => {
 
   try {
     const [quests] = await pool.query(
-      `SELECT q.id, q.chapter, q.main_quest, q.sub_quest, q.title, q.description, q.status,
+      `SELECT q.id, q.chapter, q.main_quest, q.sub_quest, q.title, q.description, q.artifact_resource_path, q.status,
        (SELECT COUNT(*) FROM quest_dialogues qd WHERE qd.quest_id = q.id) as dialogue_count
        FROM quests q 
        WHERE q.chapter = ? AND q.status = 'active'

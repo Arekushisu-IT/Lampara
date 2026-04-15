@@ -28,7 +28,7 @@
 # username            | varchar(255)                      | UNIQUE
 # password            | varchar(255)                      | bcrypt hashed
 # email               | varchar(255)                      | nullable
-# age                 | int                               |
+# birthdate            | date                              | nullable (YYYY-MM-DD)
 # level               | int                               | default 1
 # experience          | int                               | default 0
 # status              | enum('active','inactive','banned','suspended','pending') |

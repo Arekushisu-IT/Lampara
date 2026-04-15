@@ -39,10 +39,9 @@ const validatePlayerRegister = [
     .isEmail().withMessage('Invalid email format.')
     .normalizeEmail(),
 
-  body('age')
-    .notEmpty().withMessage('Age is required.')
-    .isInt({ min: 10, max: 100 }).withMessage('Age must be between 10 and 100.')
-    .toInt()
+  body('birthdate')
+    .notEmpty().withMessage('Birthdate is required.')
+    .isDate().withMessage('Birthdate must be a valid date (YYYY-MM-DD).')
 ];
 
 // ============================================================
@@ -88,10 +87,9 @@ const validatePlayerCreate = [
     .isEmail().withMessage('Invalid email format.')
     .normalizeEmail(),
 
-  body('age')
+  body('birthdate')
     .optional({ nullable: true })
-    .isInt({ min: 10, max: 100 }).withMessage('Age must be between 10 and 100.')
-    .toInt(),
+    .isDate().withMessage('Birthdate must be a valid date (YYYY-MM-DD).'),
 
   body('level')
     .optional({ nullable: true })
@@ -125,10 +123,9 @@ const validatePlayerUpdate = [
     .isEmail().withMessage('Invalid email format.')
     .normalizeEmail(),
 
-  body('age')
+  body('birthdate')
     .optional({ nullable: true })
-    .isInt({ min: 10, max: 100 }).withMessage('Age must be between 10 and 100.')
-    .toInt(),
+    .isDate().withMessage('Birthdate must be a valid date (YYYY-MM-DD).'),
 
   body('level')
     .optional({ nullable: true })

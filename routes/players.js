@@ -15,7 +15,7 @@ router.get('/', verifyToken, authorize('admin', 'staff'), async (req, res, next)
   try {
     // Use pool.query() directly — no connection leak risk
     const [players] = await pool.query(
-      'SELECT id, name, username, email, age, level, experience, status, is_online, chapter, suspicion, current_quest_id, current_sub_quest, created_at FROM players ORDER BY created_at DESC'
+      'SELECT id, name, username, email, birthdate, level, experience, status, is_online, chapter, suspicion, current_quest_id, current_sub_quest, created_at FROM players ORDER BY created_at DESC'
     );
 
     res.json({
@@ -49,7 +49,7 @@ router.get('/:id', verifyToken, authorize('admin', 'staff'), async (req, res, ne
 
 // Create new player from Admin Panel (with validation)
 router.post('/', verifyToken, authorize('admin', 'staff'), validatePlayerCreate, validate, async (req, res, next) => {
-  const { name, username, email, age, level = 1, experience = 0, status = 'active' } = req.body;
+  const { name, username, email, birthdate, level = 1, experience = 0, status = 'active' } = req.body;
 
   try {
     // Generate a random password and include it in the response for the admin to share
@@ -59,8 +59,8 @@ router.post('/', verifyToken, authorize('admin', 'staff'), validatePlayerCreate,
     const hashedPassword = await bcryptjs.hash(tempPassword, 10);
 
     const [result] = await pool.query(
-      'INSERT INTO players (name, username, password, email, age, level, experience, status, is_online) VALUES (?, ?, ?, ?, ?, ?, ?, ?, false)',
-      [name, username, hashedPassword, email || null, age || null, level, experience, status]
+      'INSERT INTO players (name, username, password, email, birthdate, level, experience, status, is_online) VALUES (?, ?, ?, ?, ?, ?, ?, ?, false)',
+      [name, username, hashedPassword, email || null, birthdate || null, level, experience, status]
     );
 
     res.status(201).json({
@@ -79,7 +79,7 @@ router.post('/', verifyToken, authorize('admin', 'staff'), validatePlayerCreate,
 // Update player (with validation)
 router.put('/:id', verifyToken, authorize('admin', 'staff'), validatePlayerUpdate, validate, async (req, res, next) => {
   const { id } = req.params;
-  const { name, username, email, age, level, experience, status, is_online } = req.body;
+  const { name, username, email, birthdate, level, experience, status, is_online } = req.body;
 
   try {
     let updateQuery = 'UPDATE players SET ';
@@ -98,9 +98,9 @@ router.put('/:id', verifyToken, authorize('admin', 'staff'), validatePlayerUpdat
       updates.push('email = ?');
       values.push(email);
     }
-    if (age !== undefined) {
-      updates.push('age = ?');
-      values.push(age);
+    if (birthdate !== undefined) {
+      updates.push('birthdate = ?');
+      values.push(birthdate);
     }
     if (level !== undefined) {
       updates.push('level = ?');
