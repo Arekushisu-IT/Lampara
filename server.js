@@ -59,6 +59,8 @@ const ALLOWED_ORIGINS = [
   'http://localhost:5501',
   'http://localhost:5502',
   'http://localhost:8080',
+  'https://lampara.life',
+  'https://lampara-capstone.netlify.app',
   process.env.FRONTEND_URL || 'http://localhost:5173',
   process.env.FRONTEND_URL_PROD || 'https://lampara.life'
 ].filter(Boolean);
