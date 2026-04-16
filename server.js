@@ -49,24 +49,29 @@ const generalLimiter = rateLimit({
 // Use '1' to trust exactly one proxy hop (Railway's load balancer)
 app.set('trust proxy', 1);
 
+const ALLOWED_ORIGINS = [
+  'http://127.0.0.1:5500',
+  'http://127.0.0.1:5501',
+  'http://127.0.0.1:5502',
+  'http://127.0.0.1:5503',
+  'http://localhost:3000',
+  'http://localhost:5500',
+  'http://localhost:5501',
+  'http://localhost:5502',
+  'http://localhost:8080',
+  process.env.FRONTEND_URL || 'http://localhost:5173',
+  process.env.FRONTEND_URL_PROD || 'https://lampara.life'
+].filter(Boolean);
+
 app.use(cors({
-  origin: [
-    'http://localhost:3000',
-    'http://localhost:5500',
-    'http://localhost',
-    'http://127.0.0.1:5500',
-    'https://lampara-capstone.netlify.app',
-    'https://lampara2026.netlify.app',
-    'https://lampara.life',
-    'https://api.lampara.life',
-    process.env.FRONTEND_URL || 'http://localhost:3000',
-    process.env.FRONTEND_URL_PROD || 'https://lampara.life'
-  ].filter(Boolean),
+  origin: ALLOWED_ORIGINS,
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Origin', 'X-Requested-With']
 }));
 
+// Handle preflight requests explicitly
+app.options('*', cors());
 // Express has built-in JSON and URL parsing (no need for body-parser)
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
@@ -146,7 +151,7 @@ async function startServer() {
     console.error('✗ Database Connection Error:', err.message);
   }
 
-  app.listen(PORT, () => {  
+  app.listen(PORT, () => {
     console.log('✓ LAMPARA Backend server running on port ' + PORT);
     console.log('✓ Environment: ' + process.env.NODE_ENV);
     console.log('✓ API Documentation:');

