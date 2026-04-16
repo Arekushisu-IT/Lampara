@@ -10,6 +10,7 @@ const playersRoutes = require('./routes/players');
 const questsRoutes = require('./routes/quests');
 const gameConfigRoutes = require('./routes/gameConfig');
 const gameRoutes = require('./routes/game');
+const leaderboardRoutes = require('./routes/leaderboard');
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -48,13 +49,6 @@ const generalLimiter = rateLimit({
 // Use '1' to trust exactly one proxy hop (Railway's load balancer)
 app.set('trust proxy', 1);
 
-// Express has built-in JSON and URL parsing (no need for body-parser)
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ limit: '10mb', extended: true }));
-
-// Apply general rate limit to all API routes
-app.use('/api', generalLimiter);
-
 app.use(cors({
   origin: [
     'http://localhost:3000',
@@ -72,6 +66,13 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
+
+// Express has built-in JSON and URL parsing (no need for body-parser)
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
+
+// Apply general rate limit to all API routes
+app.use('/api', generalLimiter);
 
 // ✨ NEW: Add Logger HERE (It tracks every request before it hits the routes!)
 const logger = require('./src/middleware/logger');
@@ -103,6 +104,9 @@ app.use('/api/game-config', gameConfigRoutes);
 
 // Game Client routes (Unity content endpoints)
 app.use('/api/game', gameRoutes);
+
+// Leaderboard routes (Player rankings and statistics)
+app.use('/api/leaderboard', leaderboardRoutes);
 
 // Root
 app.get('/', (req, res) => {
