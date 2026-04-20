@@ -16,25 +16,45 @@ const { adminLogin, playerLogin, playerLogout, getMe, adminRegister, playerRegis
 // RATE LIMITERS FOR AUTH ENDPOINTS
 // ============================================================
 
-// Login rate limiter: 5 requests per 10 minutes
-// (bcrypt is CPU-intensive, so we keep this strict)
+// Login rate limiter: 5 failed attempts per 10 minutes
+// (successful logins don't count; validation errors don't count)
 const loginLimiter = rateLimit({
   windowMs: 10 * 60 * 1000,
   max: 5,
   skipSuccessfulRequests: true,
   standardHeaders: true,
   legacyHeaders: false,
+  // Custom key: use real IP + X-Forwarded-For (Railway proxy)
+  keyGenerator: (req) => {
+    return req.ip || req.connection.remoteAddress || 'unknown';
+  },
   message: { error: 'Too many login attempts. Please try again after 10 minutes.' }
 });
 
-// Registration rate limiter: 3 requests per 1 hour
-// (prevents spam accounts — real users register once)
-const registrationLimiter = rateLimit({
+// Player registration rate limiter: 3 registrations per 1 hour
+// (successful registrations don't count; validation errors don't count)
+const playerRegistrationLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 3,
   skipSuccessfulRequests: true,
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: (req) => {
+    return req.ip || req.connection.remoteAddress || 'unknown';
+  },
+  message: { error: 'Too many registration attempts. Please try again after 1 hour.' }
+});
+
+// Admin registration rate limiter: 3 registrations per 1 hour
+const adminRegistrationLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 3,
+  skipSuccessfulRequests: true,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    return req.ip || req.connection.remoteAddress || 'unknown';
+  },
   message: { error: 'Too many registration attempts. Please try again after 1 hour.' }
 });
 
@@ -76,9 +96,9 @@ const statusCheckLimiter = rateLimit({
 router.post('/login', loginLimiter, adminLogin);
 router.post('/player-login', loginLimiter, playerLogin);
 
-// Registration endpoints (stricter rate limiting — 3 per hour)
-router.post('/register', registrationLimiter, validateAdminRegister, validate, adminRegister);
-router.post('/player-register', registrationLimiter, validatePlayerRegister, validate, playerRegister);
+// Registration endpoints (separate limiters — 3 per hour each)
+router.post('/register', adminRegistrationLimiter, validateAdminRegister, validate, adminRegister);
+router.post('/player-register', playerRegistrationLimiter, validatePlayerRegister, validate, playerRegister);
 
 // Verification endpoint (more generous rate limit — 10 per 15 min)
 router.post('/verify', verificationLimiter, verifyPlayer);
