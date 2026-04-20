@@ -36,12 +36,32 @@ const registrationLimiter = rateLimit({
   legacyHeaders: false
 });
 
+// Username check rate limiter: 30 requests per 15 minutes
+// (very generous — users may try many usernames)
+const usernameCheckLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  message: { error: 'Too many username checks. Please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
 // Verification rate limiter: 10 requests per 15 minutes
 // (more generous — users may refresh the page or have slow networks)
 const verificationLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
   message: { error: 'Too many verification attempts. Please try again after 15 minutes.' },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+// Status check rate limiter: 20 requests per 15 minutes
+// (generous for checking verification status)
+const statusCheckLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: { error: 'Too many status checks. Please try again later.' },
   standardHeaders: true,
   legacyHeaders: false
 });
@@ -61,14 +81,14 @@ router.post('/player-register', registrationLimiter, validatePlayerRegister, val
 // Verification endpoint (more generous rate limit — 10 per 15 min)
 router.post('/verify', verificationLimiter, verifyPlayer);
 
-// Username availability check (uses registration limiter)
-router.post('/check-username', registrationLimiter, checkUsername);
+// Username availability check (separate generous rate limit — 30 per 15 min)
+router.post('/check-username', usernameCheckLimiter, checkUsername);
 
 // Player logout (requires auth to prevent spoofed logouts)
 router.post('/player-logout', verifyToken, playerLogout);
 
 // Status check (moderate rate limiting)
-router.post('/check-status', registrationLimiter, checkStatus);
+router.post('/check-status', statusCheckLimiter, checkStatus);
 
 // The Security Guard (verifyToken) stops people before they can run getMe!
 router.get('/me', verifyToken, getMe);
