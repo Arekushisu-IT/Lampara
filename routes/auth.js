@@ -21,9 +21,10 @@ const { adminLogin, playerLogin, playerLogout, getMe, adminRegister, playerRegis
 const loginLimiter = rateLimit({
   windowMs: 10 * 60 * 1000,
   max: 5,
-  message: { error: 'Too many login attempts. Please try again after 10 minutes.' },
+  skipSuccessfulRequests: true,
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
+  message: { error: 'Too many login attempts. Please try again after 10 minutes.' }
 });
 
 // Registration rate limiter: 3 requests per 1 hour
@@ -31,9 +32,10 @@ const loginLimiter = rateLimit({
 const registrationLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 3,
-  message: { error: 'Too many registration attempts. Please try again after 1 hour.' },
+  skipSuccessfulRequests: true,
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
+  message: { error: 'Too many registration attempts. Please try again after 1 hour.' }
 });
 
 // Username check rate limiter: 30 requests per 15 minutes

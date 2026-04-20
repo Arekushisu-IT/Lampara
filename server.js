@@ -78,8 +78,12 @@ app.options('*', cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
-// Apply general rate limit to all API routes
-app.use('/api', generalLimiter);
+// Apply general rate limit to all API routes EXCEPT auth
+// Auth routes have their own per-endpoint rate limiters in routes/auth.js
+app.use('/api', (req, res, next) => {
+  if (req.path.startsWith('/auth/')) return next();
+  generalLimiter(req, res, next);
+});
 
 // ✨ NEW: Add Logger HERE (It tracks every request before it hits the routes!)
 const logger = require('./src/middleware/logger');
