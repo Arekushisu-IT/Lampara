@@ -17,31 +17,24 @@ const { adminLogin, playerLogin, playerLogout, getMe, adminRegister, playerRegis
 // ============================================================
 
 // Login rate limiter: 5 failed attempts per 10 minutes
-// (successful logins don't count; validation errors don't count)
 const loginLimiter = rateLimit({
   windowMs: 10 * 60 * 1000,
   max: 5,
   skipSuccessfulRequests: true,
   standardHeaders: true,
   legacyHeaders: false,
-  // Custom key: use real IP + X-Forwarded-For (Railway proxy)
-  keyGenerator: (req) => {
-    return req.ip || req.connection.remoteAddress || 'unknown';
-  },
+  keyGenerator: (req) => rateLimit.ipKeyGenerator(req),
   message: { error: 'Too many login attempts. Please try again after 10 minutes.' }
 });
 
 // Player registration rate limiter: 3 registrations per 1 hour
-// (successful registrations don't count; validation errors don't count)
 const playerRegistrationLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 3,
   skipSuccessfulRequests: true,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => {
-    return req.ip || req.connection.remoteAddress || 'unknown';
-  },
+  keyGenerator: (req) => rateLimit.ipKeyGenerator(req),
   message: { error: 'Too many registration attempts. Please try again after 1 hour.' }
 });
 
@@ -52,40 +45,38 @@ const adminRegistrationLimiter = rateLimit({
   skipSuccessfulRequests: true,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => {
-    return req.ip || req.connection.remoteAddress || 'unknown';
-  },
+  keyGenerator: (req) => rateLimit.ipKeyGenerator(req),
   message: { error: 'Too many registration attempts. Please try again after 1 hour.' }
 });
 
 // Username check rate limiter: 30 requests per 15 minutes
-// (very generous — users may try many usernames)
 const usernameCheckLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 30,
   message: { error: 'Too many username checks. Please try again later.' },
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
+  keyGenerator: (req) => rateLimit.ipKeyGenerator(req)
 });
 
 // Verification rate limiter: 10 requests per 15 minutes
-// (more generous — users may refresh the page or have slow networks)
 const verificationLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
   message: { error: 'Too many verification attempts. Please try again after 15 minutes.' },
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
+  keyGenerator: (req) => rateLimit.ipKeyGenerator(req)
 });
 
 // Status check rate limiter: 20 requests per 15 minutes
-// (generous for checking verification status)
 const statusCheckLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 20,
   message: { error: 'Too many status checks. Please try again later.' },
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
+  keyGenerator: (req) => rateLimit.ipKeyGenerator(req)
 });
 
 // ============================================================

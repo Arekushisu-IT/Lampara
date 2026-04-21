@@ -35,7 +35,8 @@ const generalLimiter = rateLimit({
   max: 100,
   message: { error: 'Too many requests. Please try again later.' },
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
+  keyGenerator: (req) => rateLimit.ipKeyGenerator(req)
 });
 
 // Note: Login and registration rate limiters are defined in routes/auth.js
