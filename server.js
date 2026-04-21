@@ -167,6 +167,10 @@ async function startServer() {
   });
 }
 
-startServer();
-
+// Export the app for use in Vercel serverless functions
 module.exports = app;
+
+// Only start the server if this file is run directly
+if (require.main === module) {
+  startServer();
+}
