@@ -163,7 +163,7 @@ async function startServer() {
     console.log('✓ API Documentation:');
     console.log('  - Health Check: http://localhost:' + PORT + '/api/health');
     console.log('  - API Root: http://localhost:' + PORT + '/');
-    console.log('✓ Ready to accept student approvals!');
+    console.log('✓ Ready to accept player approvals!');
   });
 }
 
