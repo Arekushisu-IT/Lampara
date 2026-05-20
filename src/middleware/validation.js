@@ -130,7 +130,7 @@ const validatePlayerUpdate = [
     .normalizeEmail(),
 
   body('birthdate')
-    .notEmpty().withMessage('Birthdate is required.')
+    .optional()
     .isDate().withMessage('Birthdate must be a valid date (YYYY-MM-DD).'),
 
   body('level')
