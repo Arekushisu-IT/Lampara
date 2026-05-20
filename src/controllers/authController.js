@@ -208,7 +208,11 @@ const playerRegister = async (req, res, next) => {
     // Send verification email if email provided
     if (email) {
       try {
-        const verifyUrl = `${process.env.FRONTEND_URL}/verify.html?token=${token}`;
+        // Use production URL when deployed, local URL for dev
+        const baseUrl = process.env.NODE_ENV === 'production'
+          ? (process.env.FRONTEND_URL_PROD || 'https://lampara.life')
+          : (process.env.FRONTEND_URL || 'http://127.0.0.1:5500');
+        const verifyUrl = `${baseUrl}/verify.html?token=${token}`;
 
         const emailHtml = `
           <div style="font-family:Georgia,serif;background:#0a0805;color:#e8dcc8;padding:40px;max-width:500px;margin:0 auto;border:1px solid #3d2d14;border-radius:8px;">
