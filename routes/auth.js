@@ -5,6 +5,7 @@ const rateLimit = require('express-rate-limit');
 
 // 1. Import our Security Guard (Middleware)
 const verifyToken = require('../src/middleware/auth');
+const authorize = require('../src/middleware/authorize');
 
 // 2. Import our Validation Rules
 const { validatePlayerRegister, validate, validateAdminRegister } = require('../src/middleware/validation');
@@ -88,7 +89,7 @@ router.post('/login', loginLimiter, adminLogin);
 router.post('/player-login', loginLimiter, playerLogin);
 
 // Registration endpoints (separate limiters — 3 per hour each)
-router.post('/register', adminRegistrationLimiter, validateAdminRegister, validate, adminRegister);
+router.post('/register', verifyToken, authorize('admin'), adminRegistrationLimiter, validateAdminRegister, validate, adminRegister);
 router.post('/player-register', playerRegistrationLimiter, validatePlayerRegister, validate, playerRegister);
 
 // Verification endpoint (more generous rate limit — 10 per 15 min)
@@ -100,8 +101,8 @@ router.post('/check-username', usernameCheckLimiter, checkUsername);
 // Player logout (requires auth to prevent spoofed logouts)
 router.post('/player-logout', verifyToken, playerLogout);
 
-// Status check (moderate rate limiting)
-router.post('/check-status', statusCheckLimiter, checkStatus);
+// Status check (requires authentication — players can only check their own status)
+router.post('/check-status', verifyToken, statusCheckLimiter, checkStatus);
 
 // The Security Guard (verifyToken) stops people before they can run getMe!
 router.get('/me', verifyToken, getMe);

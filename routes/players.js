@@ -158,15 +158,8 @@ router.delete('/:id', verifyToken, authorize('admin'), async (req, res, next) =>
 // Game Client: Update Tutorial Status (player can update their own status)
 router.post('/update-tutorial-status', verifyToken, async (req, res, next) => {
   const { playerId } = req.body;
-  
-  console.log('[DEBUG /update-tutorial-status] Request received');
-  console.log('[DEBUG] req.user:', JSON.stringify(req.user));
-  console.log('[DEBUG] Body playerId:', playerId, typeof playerId);
-  console.log('[DEBUG] JWT userId:', req.user.id, typeof req.user.id);
-  console.log('[DEBUG] JWT role:', req.user.role);
-  
+
   if (!playerId) {
-    console.error('[ERROR] playerId is missing from request body');
     return res.status(400).json({ error: 'Player ID required' });
   }
 
@@ -177,12 +170,9 @@ router.post('/update-tutorial-status', verifyToken, async (req, res, next) => {
 
   // Convert both to numbers for safe comparison
   if (userRole !== 'admin' && userRole !== 'staff' && Number(userId) !== Number(playerId)) {
-    console.warn(`[FORBIDDEN] userId (${userId}) !== playerId (${playerId})`);
     return res.status(403).json({ error: 'Forbidden: cannot update another player\'s tutorial status' });
   }
 
-  console.log(`[AUTH OK] Player ${playerId} authorized to update own tutorial status`);
-  
   try {
     const [result] = await pool.query(
       'UPDATE players SET has_completed_tutorial = true WHERE id = ?',
@@ -190,11 +180,9 @@ router.post('/update-tutorial-status', verifyToken, async (req, res, next) => {
     );
 
     if (result.affectedRows === 0) {
-      console.error(`[ERROR] No player found with id ${playerId}`);
       throw new NotFoundError('Player not found');
     }
 
-    console.log(`[SUCCESS] Tutorial status updated for player ${playerId}`);
     res.json({ message: 'Tutorial status updated to true' });
   } catch (err) {
     next(err);
@@ -214,9 +202,11 @@ router.post('/update-quest-status', verifyToken, async (req, res, next) => {
   const userRole = req.user.role;
   const userId = req.user.id;
 
-  if (userRole !== 'admin' && userRole !== 'staff' && userId !== playerId) {
+  // FIXED: Use Number() conversion to prevent type mismatch bypass
+  if (userRole !== 'admin' && userRole !== 'staff' && Number(userId) !== Number(playerId)) {
     return res.status(403).json({ error: 'Forbidden: cannot update another player\'s quest status' });
   }
+
 
   try {
     const [result] = await pool.query(

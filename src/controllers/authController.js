@@ -52,7 +52,7 @@ const adminLogin = async (req, res, next) => {
     const token = jwt.sign(
       { id: user.id, email: user.email, role: user.role },
       process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRATION || '7d' }
+      { expiresIn: process.env.JWT_EXPIRATION || '4h' }
     );
 
     return res.json({
@@ -86,7 +86,7 @@ const playerLogin = async (req, res, next) => {
     const token = jwt.sign(
       { id: player.id, username: player.username, role: 'player' },
       process.env.JWT_SECRET,
-      { expiresIn: '30d' }
+      { expiresIn: '7d' }
     );
 
     // Turn them ONLINE
@@ -164,7 +164,7 @@ const adminRegister = async (req, res, next) => {
     const { email, password, name } = req.body;
     if (!email || !password || !name) return res.status(400).json({ error: 'Email, password, and name required' });
 
-    const hashedPassword = await bcryptjs.hash(password, 10);
+    const hashedPassword = await bcryptjs.hash(password, 12);
     await pool.query('INSERT INTO Admin_User (email, password, name, role, status) VALUES (?, ?, ?, ?, ?)', [email, hashedPassword, name, 'admin', 'active']);
     res.status(201).json({ message: 'Admin registered successfully' });
   } catch (err) {
@@ -268,11 +268,12 @@ const checkUsername = async (req, res, next) => {
 const verifyPlayer = async (req, res, next) => {
   const { token } = req.body;
 
-  console.log('🔐 [VERIFY] Request received');
-  console.log('🔐 [VERIFY] Token present:', !!token);
-  if (token) {
-    console.log('🔐 [VERIFY] Token length:', token.length);
-    console.log('🔐 [VERIFY] Token preview:', token.substring(0, 20) + '...');
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('🔐 [VERIFY] Request received');
+    console.log('🔐 [VERIFY] Token present:', !!token);
+    if (token) {
+      console.log('🔐 [VERIFY] Token length:', token.length);
+    }
   }
 
   if (!token) {
@@ -282,25 +283,22 @@ const verifyPlayer = async (req, res, next) => {
 
   try {
     // Find player by verification token
-    console.log('🔍 [VERIFY] Querying database for token...');
     const [rows] = await pool.query(
       'SELECT id, name, email, status, token_expires_at FROM players WHERE verify_token = ?',
       [token]
     );
 
-    console.log(' [VERIFY] Database result count:', rows.length);
+
 
     if (rows.length === 0) {
-      console.log('❌ [VERIFY] No player found with this token');
       return res.status(404).json({ error: 'Invalid token' });
     }
 
     const player = rows[0];
-    console.log('✅ [VERIFY] Player found:', { id: player.id, name: player.name, status: player.status });
+
 
     // Check if already verified
     if (player.status === 'active') {
-      console.log('ℹ️  [VERIFY] Player already verified - returning user info');
       return res.status(409).json({
         error: 'Already verified',
         user: { name: player.name, email: player.email }
@@ -310,30 +308,23 @@ const verifyPlayer = async (req, res, next) => {
     // Check if token expired
     const now = new Date();
     const expiresAt = new Date(player.token_expires_at);
-    console.log('⏰ [VERIFY] Current time:', now.toISOString());
-    console.log('⏰ [VERIFY] Token expires at:', expiresAt.toISOString());
-    console.log('⏰ [VERIFY] Is expired:', now > expiresAt);
 
     if (now > expiresAt) {
-      console.warn('⏳ [VERIFY] Token has expired');
       return res.status(410).json({ error: 'Link expired' });
     }
 
     // Verify the account (keep the token for future "already verified" checks)
-    console.log('✨ [VERIFY] Activating player account...');
     await pool.query(
       'UPDATE players SET status = "active" WHERE id = ?',
       [player.id]
     );
 
-    console.log('✅ [VERIFY] Account verified successfully:', player.email);
     res.json({
       message: 'Verified!',
       user: { name: player.name, email: player.email }
     });
 
   } catch (err) {
-    console.error('❌ [VERIFY] Error during verification:', err);
     next(err);
   }
 };
@@ -343,8 +334,13 @@ const verifyPlayer = async (req, res, next) => {
 // ==========================================
 const checkStatus = async (req, res, next) => {
   try {
-    const { id } = req.body;
-    if (!id) return res.status(400).json({ error: 'Player ID required' });
+    // Use authenticated user's ID — players can only check their own status
+    const id = req.body.id || req.user.id;
+
+    // Players can only check their own status; admin/staff can check any
+    if (req.user.role === 'player' && Number(req.user.id) !== Number(id)) {
+      return res.status(403).json({ error: 'Forbidden: cannot check another player\'s status' });
+    }
 
     const [rows] = await pool.query(
       'SELECT status, has_completed_tutorial FROM players WHERE id = ?',

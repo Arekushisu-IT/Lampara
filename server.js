@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 require('dotenv').config();
 
@@ -75,8 +76,8 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Origin', 'X-Requested-With']
 }));
 
-// Handle preflight requests explicitly
-app.options('*', cors());
+// Security headers (Clickjacking, MIME-sniffing, XSS protection, etc.)
+app.use(helmet());
 // Express has built-in JSON and URL parsing (no need for body-parser)
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));

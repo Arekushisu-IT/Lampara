@@ -31,7 +31,7 @@ const validatePlayerRegister = [
 
   body('password')
     .notEmpty().withMessage('Password is required.')
-    .isLength({ min: 8, max: 12 }).withMessage('Password must be between 8 and 12 characters long.'),
+    .isLength({ min: 8, max: 128 }).withMessage('Password must be between 8 and 128 characters long.'),
 
   body('email')
     .trim()
@@ -62,7 +62,13 @@ const validateAdminRegister = [
 
   body('password')
     .notEmpty().withMessage('Password is required.')
-    .isLength({ min: 8 }).withMessage('Password must be at least 8 characters long.')
+    .isStrongPassword({
+      minLength: 10,
+      minLowercase: 1,
+      minUppercase: 1,
+      minNumbers: 1,
+      minSymbols: 1
+    }).withMessage('Password must be at least 10 characters and include uppercase, lowercase, number, and symbol.')
 ];
 
 // ============================================================

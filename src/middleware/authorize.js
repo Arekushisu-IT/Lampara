@@ -10,11 +10,15 @@ function authorize(...allowedRoles) {
     }
 
     if (!allowedRoles.includes(req.user.role)) {
-      return res.status(403).json({
-        error: 'Forbidden: insufficient permissions',
-        required: allowedRoles,
-        got: req.user.role
-      });
+      const response = { error: 'Forbidden: insufficient permissions' };
+
+      // Only include debug info in non-production environments
+      if (process.env.NODE_ENV !== 'production') {
+        response.required = allowedRoles;
+        response.got = req.user.role;
+      }
+
+      return res.status(403).json(response);
     }
 
     next();
