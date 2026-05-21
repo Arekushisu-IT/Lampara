@@ -360,6 +360,47 @@ const checkStatus = async (req, res, next) => {
 };
 
 // ==========================================
+// CHECK VERIFICATION STATUS (PUBLIC)
+// Players can check if their account is verified
+// by providing their username or email — no auth required.
+// ==========================================
+const checkVerification = async (req, res, next) => {
+  try {
+    const { username, email } = req.body;
+
+    if (!username && !email) {
+      return res.status(400).json({ error: 'Username or email is required' });
+    }
+
+    let query, param;
+    if (username) {
+      query = 'SELECT status, name FROM players WHERE username = ?';
+      param = username;
+    } else {
+      query = 'SELECT status, name FROM players WHERE email = ?';
+      param = email;
+    }
+
+    const [rows] = await pool.query(query, [param]);
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Account not found' });
+    }
+
+    const player = rows[0];
+    const isVerified = player.status === 'active';
+
+    res.json({
+      verified: isVerified,
+      status: player.status,
+      name: player.name
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ==========================================
 // EXPORT ALL FUNCTIONS
 // ==========================================
-module.exports = { adminLogin, playerLogin, playerLogout, getMe, adminRegister, playerRegister, checkUsername, verifyPlayer, checkStatus };
+module.exports = { adminLogin, playerLogin, playerLogout, getMe, adminRegister, playerRegister, checkUsername, verifyPlayer, checkStatus, checkVerification };

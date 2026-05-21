@@ -11,7 +11,7 @@ const authorize = require('../src/middleware/authorize');
 const { validatePlayerRegister, validate, validateAdminRegister } = require('../src/middleware/validation');
 
 // 3. Import our Database Logic (Controller)
-const { adminLogin, playerLogin, playerLogout, getMe, adminRegister, playerRegister, checkUsername, verifyPlayer, checkStatus } = require('../src/controllers/authController');
+const { adminLogin, playerLogin, playerLogout, getMe, adminRegister, playerRegister, checkUsername, verifyPlayer, checkStatus, checkVerification } = require('../src/controllers/authController');
 
 // ============================================================
 // RATE LIMITERS FOR AUTH ENDPOINTS
@@ -106,5 +106,8 @@ router.post('/check-status', verifyToken, statusCheckLimiter, checkStatus);
 
 // The Security Guard (verifyToken) stops people before they can run getMe!
 router.get('/me', verifyToken, getMe);
+
+// Public verification status check (no auth — for registration page)
+router.post('/check-verification', statusCheckLimiter, checkVerification);
 
 module.exports = router;
