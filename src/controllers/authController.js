@@ -401,6 +401,116 @@ const checkVerification = async (req, res, next) => {
 };
 
 // ==========================================
+// FORGOT PASSWORD (send reset link via email)
+// ==========================================
+const forgotPassword = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: 'Email is required' });
+
+    // Find player by email
+    const [rows] = await pool.query(
+      'SELECT id, name, email FROM players WHERE email = ? AND status = ?',
+      [email, 'active']
+    );
+
+    // Always return success even if not found (prevents email enumeration)
+    if (rows.length === 0) {
+      return res.json({ message: 'If an account exists with that email, a reset link has been sent.' });
+    }
+
+    const player = rows[0];
+
+    // Generate reset token (1 hour expiry)
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+
+    // Invalidate any existing reset tokens for this player
+    await pool.query('UPDATE password_resets SET used = TRUE WHERE player_id = ? AND used = FALSE', [player.id]);
+
+    // Insert new reset token
+    await pool.query(
+      'INSERT INTO password_resets (player_id, token, expires_at) VALUES (?, ?, ?)',
+      [player.id, token, expiresAt]
+    );
+
+    // Build reset URL
+    const baseUrl = process.env.NODE_ENV === 'production'
+      ? (process.env.FRONTEND_URL_PROD || 'https://lampara.life')
+      : (process.env.FRONTEND_URL || 'http://127.0.0.1:5500');
+    const resetUrl = `${baseUrl}/reset-password.html?token=${token}`;
+
+    const emailHtml = `
+      <div style="font-family:Georgia,serif;background:#0a0805;color:#e8dcc8;padding:40px;max-width:500px;margin:0 auto;border:1px solid #3d2d14;border-radius:8px;">
+        <h2 style="color:#e8b84b;letter-spacing:6px;font-size:24px;">⚜ LAMPARA</h2>
+        <p style="font-size:16px;">Hello, <strong>${player.name}</strong>.</p>
+        <p style="color:#a89070;line-height:1.8;">We received a request to reset your password. Click the button below to set a new password.</p>
+        <div style="text-align:center;margin:28px 0;">
+          <a href="${resetUrl}"
+             style="background:rgba(201,149,58,.2);border:1px solid #7a5820;border-radius:5px;color:#e8b84b;padding:14px 32px;text-decoration:none;font-size:13px;letter-spacing:2px;">
+            ⚜ RESET PASSWORD
+          </a>
+        </div>
+        <p style="font-size:11px;color:#6b5740;">This link expires in 1 hour. If you didn't request this, ignore this email.<br>STI College General Santos · BSIT Capstone 2026</p>
+      </div>
+    `;
+
+    sendEmailViaWebhook(player.email, '⚜ Reset Your Lampara Password', emailHtml)
+      .catch(err => console.error('CRITICAL: Password reset email failed:', err));
+
+    res.json({ message: 'If an account exists with that email, a reset link has been sent.' });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ==========================================
+// RESET PASSWORD (validate token + update)
+// ==========================================
+const resetPassword = async (req, res, next) => {
+  try {
+    const { token, password } = req.body;
+
+    if (!token || !password) {
+      return res.status(400).json({ error: 'Token and new password are required' });
+    }
+
+    if (password.length < 8 || password.length > 128) {
+      return res.status(400).json({ error: 'Password must be 8-128 characters' });
+    }
+
+    // Find valid reset token
+    const [rows] = await pool.query(
+      'SELECT pr.id, pr.player_id, pr.expires_at, p.name FROM password_resets pr JOIN players p ON pr.player_id = p.id WHERE pr.token = ? AND pr.used = FALSE',
+      [token]
+    );
+
+    if (rows.length === 0) {
+      return res.status(400).json({ error: 'Invalid or expired reset link' });
+    }
+
+    const reset = rows[0];
+
+    // Check expiry
+    if (new Date() > new Date(reset.expires_at)) {
+      await pool.query('UPDATE password_resets SET used = TRUE WHERE id = ?', [reset.id]);
+      return res.status(410).json({ error: 'Reset link has expired. Please request a new one.' });
+    }
+
+    // Hash new password and update
+    const hashedPassword = await bcryptjs.hash(password, 10);
+    await pool.query('UPDATE players SET password = ? WHERE id = ?', [hashedPassword, reset.player_id]);
+
+    // Mark token as used
+    await pool.query('UPDATE password_resets SET used = TRUE WHERE id = ?', [reset.id]);
+
+    res.json({ message: 'Password has been reset successfully. You can now sign in with your new password.', name: reset.name });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ==========================================
 // EXPORT ALL FUNCTIONS
 // ==========================================
-module.exports = { adminLogin, playerLogin, playerLogout, getMe, adminRegister, playerRegister, checkUsername, verifyPlayer, checkStatus, checkVerification };
+module.exports = { adminLogin, playerLogin, playerLogout, getMe, adminRegister, playerRegister, checkUsername, verifyPlayer, checkStatus, checkVerification, forgotPassword, resetPassword };

@@ -12,6 +12,8 @@ const questsRoutes = require('./routes/quests');
 const gameConfigRoutes = require('./routes/gameConfig');
 const gameRoutes = require('./routes/game');
 const leaderboardRoutes = require('./routes/leaderboard');
+const communityRoutes = require('./routes/community');
+const notificationRoutes = require('./routes/notifications');
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -122,6 +124,12 @@ app.use('/api/game', gameRoutes);
 
 // Leaderboard routes (Player rankings and statistics)
 app.use('/api/leaderboard', leaderboardRoutes);
+
+// Community routes (Posts, likes, comments)
+app.use('/api/community', communityRoutes);
+
+// Notification routes (Player notifications)
+app.use('/api/notifications', notificationRoutes);
 
 // Root
 app.get('/', (req, res) => {
