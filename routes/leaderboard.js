@@ -21,7 +21,7 @@ function buildRanking(playerRow, index) {
     playerId:        playerRow.playerId,
     playerName:      playerRow.playerName,
     email:           playerRow.email,
-    questProgress:   playerRow.questProgress || 0,
+    questProgress:   Math.min(100, playerRow.questProgress || 0),
     currentQuest:    playerRow.current_quest_id,
     currentSubQuest: playerRow.current_sub_quest,
     chapter:         playerRow.chapter,
@@ -46,7 +46,14 @@ const BASE_SELECT = `
   p.is_online        as isActive,
   p.created_at,
   p.updated_at,
-  ROUND(p.current_quest_id * 50 + p.current_sub_quest * 7, 0) as questProgress,
+  ROUND(
+    COALESCE(pq.quests_completed, 0) * 100.0 /
+    GREATEST(
+      (SELECT COUNT(*) FROM quests WHERE status = 'active'),
+      1
+    ),
+    0
+  ) as questProgress,
   COALESCE(pq.quests_completed, 0) as questsCompleted
 `;
 
@@ -187,7 +194,18 @@ router.get('/top/:count', verifyToken, async (req, res, next) => {
 
     res.json({
       success:   true,
-      topPlayers: topRankings,
+      topPlayers: topRankings.map((p, idx) => ({
+        rank:            idx + 1,
+        playerId:        p.playerId,
+        playerName:      p.playerName,
+        email:           p.email,
+        questProgress:   Math.min(100, p.questProgress || 0),
+        currentQuest:    p.current_quest_id,
+        currentSubQuest: p.current_sub_quest,
+        chapter:         p.chapter,
+        failCount:       p.suspicion || 0,
+        status:          p.status
+      })),
       count:     topRankings.length,
       timestamp: new Date().toISOString()
     });

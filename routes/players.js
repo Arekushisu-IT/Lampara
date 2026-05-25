@@ -13,17 +13,27 @@ const router = express.Router();
 // Get all players (admin/staff only)
 router.get('/', verifyToken, authorize('admin', 'staff'), async (req, res, next) => {
   try {
-    // Use pool.query() directly — no connection leak risk
     const [players] = await pool.query(
-      'SELECT id, name, username, email, birthdate, level, experience, status, is_online, chapter, suspicion, current_quest_id, current_sub_quest, created_at FROM players ORDER BY created_at DESC'
+      `SELECT p.id, p.name, p.username, p.email, p.birthdate, p.level, p.experience,
+              p.status, p.is_online, p.chapter, p.suspicion, p.current_quest_id,
+              p.current_sub_quest, p.created_at,
+              COALESCE(ROUND((SELECT COUNT(*) FROM player_quests pq WHERE pq.player_id = p.id AND pq.status = 'completed') * 100.0 / NULLIF((SELECT COUNT(*) FROM quests WHERE status = 'active'), 0), 0), 0) as overall_progress
+       FROM players p ORDER BY p.created_at DESC`
+    );
+
+    const count7dResult = await pool.query(
+      'SELECT COUNT(*) as c FROM players WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)'
     );
 
     res.json({
       count: players.length,
-      players
+      players,
+      stats: {
+        weeklyNew: count7dResult[0][0].c || 0
+      }
     });
   } catch (err) {
-    next(err); // Let global error handler catch it
+    next(err);
   }
 });
 
@@ -240,12 +250,28 @@ router.post('/:id/complete-quest', verifyToken, async (req, res, next) => {
   }
 
   try {
+    // 0. Validate that quest_id exists in the database before inserting
+    // Unity sends calculated quest_id — if it doesn't exist, resolve by chapter/main_quest/sub_quest
+    let resolvedQuestId = quest_id;
+    const [questCheck] = await pool.query('SELECT id FROM quests WHERE id = ?', [quest_id]);
+
+    if (questCheck.length === 0) {
+      // Quest_id doesn't exist in DB, try to resolve by chapter/main_quest/sub_quest
+      const [questResolve] = await pool.query(
+        'SELECT id FROM quests WHERE chapter = ? AND main_quest = ? AND sub_quest = ?',
+        [advance_to_chapter || 1, currentMainQuest, currentSubQuest]
+      );
+
+      if (questResolve.length === 0) return res.status(404).json({ error: 'Quest not found in database — cannot complete quest' });
+      resolvedQuestId = questResolve[0].id;
+    }
+
     // 1. Log the quest as 'completed' in the player_quests table
     await pool.query(
       `INSERT INTO player_quests (player_id, quest_id, status, progress_percent, completed_at)
        VALUES (?, ?, 'completed', 100, CURRENT_TIMESTAMP)
        ON DUPLICATE KEY UPDATE status = 'completed', progress_percent = 100, completed_at = CURRENT_TIMESTAMP`,
-      [id, quest_id]
+      [id, resolvedQuestId]
     );
 
     // 2. Fetch the player's current stats

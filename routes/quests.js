@@ -362,4 +362,33 @@ router.delete('/dialogues/:dialogueId', verifyToken, authorize('admin'), async (
   }
 });
 
+// Get quest difficulty/failure statistics for dashboard
+router.get('/quest-stats', verifyToken, authorize('admin', 'staff'), async (req, res, next) => {
+  try {
+    const [stats] = await pool.query(`
+      SELECT
+        q.id as quest_id,
+        CONCAT('Ch.', q.chapter, ' MQ', q.main_quest, ' SQ', q.sub_quest) as quest_label,
+        q.title,
+        COUNT(pq.id) as attempts,
+        COALESCE(SUM(CASE WHEN pq.status = 'completed' THEN 1 ELSE 0 END), 0) as completed,
+        COALESCE(SUM(CASE WHEN pq.status != 'completed' THEN 1 ELSE 0 END), 0) as failed,
+        ROUND(
+          (COUNT(pq.id) - COALESCE(SUM(CASE WHEN pq.status = 'completed' THEN 1 ELSE 0 END), 0)) * 100.0
+          / NULLIF(COUNT(pq.id), 0), 1
+        ) as fail_rate
+      FROM quests q
+      LEFT JOIN player_quests pq ON pq.quest_id = q.id
+      WHERE q.status = 'active'
+      GROUP BY q.id, q.chapter, q.main_quest, q.sub_quest, q.title
+      HAVING attempts > 0
+      ORDER BY fail_rate DESC, attempts DESC
+    `);
+
+    res.json({ count: stats.length, stats });
+  } catch (err) {
+    next(err);
+  }
+});
+
 module.exports = router;
