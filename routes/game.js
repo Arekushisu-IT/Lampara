@@ -3,6 +3,7 @@ const pool = require('../db');
 const verifyToken = require('../src/middleware/auth');
 const authorize = require('../src/middleware/authorize');
 const { NotFoundError } = require('../src/utils/errors');
+const { buildOptionDeltas } = require('../src/utils/dialogues');
 
 const router = express.Router();
 
@@ -29,7 +30,8 @@ router.get('/quest-content/:chapter/:quest/:subquest', verifyToken, async (req, 
     // 2. Fetch all dialogues for this sub-quest
     const [dialogues] = await pool.query(
       `SELECT id, sequence_order, npc_name, npc_text, option_a_text, option_b_text, option_c_text,
-              option_a_correct, option_b_correct, option_c_correct, suspicion_penalty
+              option_a_correct, option_b_correct, option_c_correct, suspicion_penalty,
+              option_a_delta, option_b_delta, option_c_delta
        FROM quest_dialogues
        WHERE quest_id = ?
        ORDER BY sequence_order`,
@@ -102,7 +104,7 @@ router.post('/save-dialogues/:chapter/:quest/:subquest', verifyToken, authorize(
       const optionACorrect = d.option_a_correct ? 1 : 0;
       const optionBCorrect = d.option_b_correct ? 1 : 0;
       const optionCCorrect = d.option_c_correct ? 1 : 0;
-      const suspicionPenalty = d.suspicion_penalty || 10;
+      const { optionADelta, optionBDelta, optionCDelta, suspicionPenalty } = buildOptionDeltas(d);
 
       // Check if dialogue with this sequence_order already exists
       const [existing] = await conn.query(
@@ -116,21 +118,21 @@ router.post('/save-dialogues/:chapter/:quest/:subquest', verifyToken, authorize(
           `UPDATE quest_dialogues SET
             npc_name = ?, npc_text = ?, option_a_text = ?, option_b_text = ?, option_c_text = ?,
             option_a_correct = ?, option_b_correct = ?, option_c_correct = ?,
-            suspicion_penalty = ?, updated_at = NOW()
+            suspicion_penalty = ?, option_a_delta = ?, option_b_delta = ?, option_c_delta = ?, updated_at = NOW()
           WHERE quest_id = ? AND sequence_order = ?`,
           [npcName, npcText, optionAText, optionBText, optionCText,
            optionACorrect, optionBCorrect, optionCCorrect,
-           suspicionPenalty, questId, d.sequence_order]
+           suspicionPenalty, optionADelta, optionBDelta, optionCDelta, questId, d.sequence_order]
         );
       } else {
         // INSERT
         await conn.query(
           `INSERT INTO quest_dialogues
             (quest_id, sequence_order, npc_name, npc_text, option_a_text, option_b_text, option_c_text,
-             option_a_correct, option_b_correct, option_c_correct, suspicion_penalty)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             option_a_correct, option_b_correct, option_c_correct, suspicion_penalty, option_a_delta, option_b_delta, option_c_delta)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [questId, d.sequence_order, npcName, npcText, optionAText, optionBText, optionCText,
-           optionACorrect, optionBCorrect, optionCCorrect, suspicionPenalty]
+           optionACorrect, optionBCorrect, optionCCorrect, suspicionPenalty, optionADelta, optionBDelta, optionCDelta]
         );
       }
       savedCount++;

@@ -100,6 +100,9 @@
 # option_b_correct    | tinyint(1)                        | default 1
 # option_c_correct    | tinyint(1)                        | default 0
 # suspicion_penalty   | int                               | default 10
+# option_a_delta      | int                               | signed suspicion change for A
+# option_b_delta      | int                               | signed suspicion change for B
+# option_c_delta      | int                               | signed suspicion change for C
 # context_notes       | text                              |
 # created_at          | timestamp                         |
 # updated_at          | timestamp                         |

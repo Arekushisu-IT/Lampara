@@ -7,6 +7,7 @@ const verifyToken = require('../src/middleware/auth');
 const authorize = require('../src/middleware/authorize');
 const { NotFoundError, ValidationError } = require('../src/utils/errors');
 const { validateQuestCreate, validateQuestUpdate, validate } = require('../src/middleware/validation');
+const { buildOptionDeltas } = require('../src/utils/dialogues');
 
 const router = express.Router();
 
@@ -231,7 +232,7 @@ router.get('/:id(\\d+)/dialogues', verifyToken, authorize('admin', 'staff'), asy
     const [dialogues] = await pool.query(
       `SELECT id, quest_id, sequence_order, npc_name, npc_text,
               option_a_text, option_b_text, option_c_text, option_a_correct, option_b_correct, option_c_correct,
-              suspicion_penalty, artifact_resource_path, context_notes, created_at, updated_at
+              suspicion_penalty, option_a_delta, option_b_delta, option_c_delta, artifact_resource_path, context_notes, created_at, updated_at
        FROM quest_dialogues
        WHERE quest_id = ?
        ORDER BY sequence_order`,
@@ -261,6 +262,9 @@ router.post('/:id(\\d+)/dialogues', verifyToken, authorize('admin', 'staff'), as
     option_a_correct = 0,
     option_b_correct = 1,
     option_c_correct = 0,
+    option_a_delta,
+    option_b_delta,
+    option_c_delta,
     suspicion_penalty = 10,
     artifact_resource_path,
     context_notes = ''
@@ -271,6 +275,16 @@ router.post('/:id(\\d+)/dialogues', verifyToken, authorize('admin', 'staff'), as
   }
 
   try {
+    const { optionADelta, optionBDelta, optionCDelta, suspicionPenalty } = buildOptionDeltas({
+      option_a_correct,
+      option_b_correct,
+      option_c_correct,
+      option_a_delta,
+      option_b_delta,
+      option_c_delta,
+      suspicion_penalty
+    });
+
     // Auto-assign sequence_order if not provided
     let seqOrder = sequence_order;
     if (!seqOrder) {
@@ -284,10 +298,10 @@ router.post('/:id(\\d+)/dialogues', verifyToken, authorize('admin', 'staff'), as
     const [result] = await pool.query(
       `INSERT INTO quest_dialogues
        (quest_id, sequence_order, npc_name, npc_text, option_a_text, option_b_text, option_c_text,
-        option_a_correct, option_b_correct, option_c_correct, suspicion_penalty, context_notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        option_a_correct, option_b_correct, option_c_correct, suspicion_penalty, option_a_delta, option_b_delta, option_c_delta, context_notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [id, seqOrder, npc_name, npc_text, option_a_text, option_b_text, option_c_text,
-       option_a_correct, option_b_correct, option_c_correct, suspicion_penalty, context_notes]
+       option_a_correct, option_b_correct, option_c_correct, suspicionPenalty, optionADelta, optionBDelta, optionCDelta, context_notes]
     );
 
     res.status(201).json({
@@ -307,7 +321,8 @@ router.post('/:id(\\d+)/dialogues', verifyToken, authorize('admin', 'staff'), as
 router.put('/dialogues/:dialogueId', verifyToken, authorize('admin', 'staff'), async (req, res, next) => {
   const { dialogueId } = req.params;
   const { npc_name, npc_text, option_a_text, option_b_text, option_c_text,
-          option_a_correct, option_b_correct, option_c_correct, suspicion_penalty, context_notes, sequence_order } = req.body;
+          option_a_correct, option_b_correct, option_c_correct, suspicion_penalty,
+          option_a_delta, option_b_delta, option_c_delta, context_notes, sequence_order } = req.body;
 
   try {
     let updateQuery = 'UPDATE quest_dialogues SET ';
@@ -319,10 +334,34 @@ router.put('/dialogues/:dialogueId', verifyToken, authorize('admin', 'staff'), a
     if (option_a_text !== undefined)   { updates.push('option_a_text = ?');   values.push(option_a_text); }
     if (option_b_text !== undefined)   { updates.push('option_b_text = ?');   values.push(option_b_text); }
     if (option_c_text !== undefined)   { updates.push('option_c_text = ?');   values.push(option_c_text); }
+    const hasDeltaInput =
+      option_a_correct !== undefined ||
+      option_b_correct !== undefined ||
+      option_c_correct !== undefined ||
+      suspicion_penalty !== undefined ||
+      option_a_delta !== undefined ||
+      option_b_delta !== undefined ||
+      option_c_delta !== undefined;
+
     if (option_a_correct !== undefined){ updates.push('option_a_correct = ?');values.push(option_a_correct); }
     if (option_b_correct !== undefined){ updates.push('option_b_correct = ?');values.push(option_b_correct); }
     if (option_c_correct !== undefined){ updates.push('option_c_correct = ?');values.push(option_c_correct); }
-    if (suspicion_penalty !== undefined){ updates.push('suspicion_penalty = ?');values.push(suspicion_penalty); }
+
+    if (hasDeltaInput) {
+      const { optionADelta, optionBDelta, optionCDelta, suspicionPenalty } = buildOptionDeltas({
+        option_a_correct,
+        option_b_correct,
+        option_c_correct,
+        suspicion_penalty,
+        option_a_delta,
+        option_b_delta,
+        option_c_delta
+      });
+      updates.push('suspicion_penalty = ?'); values.push(suspicionPenalty);
+      updates.push('option_a_delta = ?'); values.push(optionADelta);
+      updates.push('option_b_delta = ?'); values.push(optionBDelta);
+      updates.push('option_c_delta = ?'); values.push(optionCDelta);
+    }
     if (context_notes !== undefined)   { updates.push('context_notes = ?');   values.push(context_notes); }
     if (sequence_order !== undefined)  { updates.push('sequence_order = ?');  values.push(sequence_order); }
 
@@ -421,11 +460,18 @@ router.post('/import-dialogues', verifyToken, authorize('admin', 'staff'), async
           (quest_id, sequence_order, npc_name, npc_text,
            option_a_text, option_b_text, option_c_text,
            option_a_correct, option_b_correct, option_c_correct,
-           suspicion_penalty, context_notes)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 1, 0, 0, 10, ?)`,
+           suspicion_penalty, option_a_delta, option_b_delta, option_c_delta, context_notes)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           d.quest_id, d.sequence_order, d.npc_name, d.npc_text,
           d.option_a_text, d.option_b_text, d.option_c_text,
+          d.option_a_correct ?? 1,
+          d.option_b_correct ?? 0,
+          d.option_c_correct ?? 0,
+          d.suspicion_penalty ?? 10,
+          d.option_a_delta ?? -10,
+          d.option_b_delta ?? 10,
+          d.option_c_delta ?? 35,
           d.context_notes
         ]
       );
