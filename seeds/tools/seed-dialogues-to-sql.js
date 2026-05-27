@@ -1,10 +1,10 @@
 /**
  * seed-dialogues-to-sql.js
  * Generates SQL INSERT statements from seed-dialogues.js for Railway console.
- * Run: node seeds/seed-dialogues-to-sql.js > seeds/import-dialogues.sql
+ * Run: node seeds/tools/seed-dialogues-to-sql.js > seeds/generated/import-dialogues.sql
  */
 
-const { QUEST_UPDATES, DIALOGUES } = require('./seed-dialogues');
+const { QUEST_UPDATES, DIALOGUES } = require('../generated/seed-dialogues');
 
 function escapeSql(value) {
   return String(value)

@@ -1,7 +1,7 @@
 const path = require('path');
-require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
+require('dotenv').config({ path: path.join(__dirname, '..', '..', '.env') });
 
-const db = require('../db');
+const db = require('../../db');
 
 async function main() {
   const [rows] = await db.query(`

@@ -4,7 +4,7 @@ const path = require('path');
 const sourcePath = process.argv[2];
 
 if (!sourcePath) {
-  throw new Error('Usage: node seeds/generate-seed-from-markdown.js <markdown-path>');
+  throw new Error('Usage: node seeds/tools/generate-seed-from-markdown.js <markdown-path>');
 }
 
 const markdown = fs.readFileSync(sourcePath, 'utf8');
@@ -229,7 +229,7 @@ DELETE FROM quest_dialogues;
 ${dialogues.map(item => `INSERT INTO quest_dialogues (quest_id, sequence_order, npc_name, npc_text, option_a_text, option_b_text, option_c_text, option_a_correct, option_b_correct, option_c_correct, suspicion_penalty, option_a_delta, option_b_delta, option_c_delta, context_notes) VALUES (${item.quest_id}, ${item.sequence_order}, '${escapeSql(item.npc_name)}', '${escapeSql(item.npc_text)}', '${escapeSql(item.option_a_text)}', '${escapeSql(item.option_b_text)}', '${escapeSql(item.option_c_text)}', ${item.option_a_correct}, ${item.option_b_correct}, ${item.option_c_correct}, ${item.suspicion_penalty}, ${item.option_a_delta}, ${item.option_b_delta}, ${item.option_c_delta}, '${escapeSql(item.context_notes)}');`).join('\n')}
 `;
 
-fs.writeFileSync(path.join(__dirname, 'seed-dialogues.js'), seedFile, 'utf8');
-fs.writeFileSync(path.join(__dirname, 'import-dialogues.sql'), sqlFile, 'utf8');
+fs.writeFileSync(path.join(__dirname, '..', 'generated', 'seed-dialogues.js'), seedFile, 'utf8');
+fs.writeFileSync(path.join(__dirname, '..', 'generated', 'import-dialogues.sql'), sqlFile, 'utf8');
 
 console.log(`Generated ${questUpdates.length} quest updates and ${dialogues.length} dialogues.`);

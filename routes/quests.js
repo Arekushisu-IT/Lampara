@@ -435,8 +435,8 @@ router.post('/import-dialogues', verifyToken, authorize('admin', 'staff'), async
   let conn;
   try {
     // Clear require cache to pick up latest seed data
-    delete require.cache[require.resolve('../seeds/seed-dialogues')];
-    const { QUEST_UPDATES, DIALOGUES } = require('../seeds/seed-dialogues');
+    delete require.cache[require.resolve('../seeds/generated/seed-dialogues')];
+    const { QUEST_UPDATES, DIALOGUES } = require('../seeds/generated/seed-dialogues');
 
     conn = await pool.getConnection();
     await conn.beginTransaction();

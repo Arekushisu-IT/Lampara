@@ -1,8 +1,8 @@
 const path = require('path');
-require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
+require('dotenv').config({ path: path.join(__dirname, '..', '..', '.env') });
 
-const db = require('../db');
-const { QUEST_UPDATES, DIALOGUES } = require('./seed-dialogues');
+const db = require('../../db');
+const { QUEST_UPDATES, DIALOGUES } = require('../generated/seed-dialogues');
 
 const INSERT_COLUMNS = [
   'quest_id',
