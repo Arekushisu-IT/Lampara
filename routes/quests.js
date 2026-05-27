@@ -391,4 +391,70 @@ router.get('/quest-stats', verifyToken, authorize('admin', 'staff'), async (req,
   }
 });
 
+// Import dialogue seed data into quest_dialogues table
+router.post('/import-dialogues', verifyToken, authorize('admin', 'staff'), async (req, res, next) => {
+  let conn;
+  try {
+    // Clear require cache to pick up latest seed data
+    delete require.cache[require.resolve('../seeds/seed-dialogues')];
+    const { QUEST_UPDATES, DIALOGUES } = require('../seeds/seed-dialogues');
+
+    conn = await pool.getConnection();
+    await conn.beginTransaction();
+
+    // 1. Update quest titles & descriptions
+    for (const q of QUEST_UPDATES) {
+      await conn.query(
+        'UPDATE quests SET title = ?, description = ?, updated_at = NOW() WHERE id = ?',
+        [q.title, q.description, q.id]
+      );
+    }
+
+    // 2. Delete ALL existing dialogues (clean slate)
+    const [delResult] = await conn.query('DELETE FROM quest_dialogues');
+
+    // 3. Insert all dialogues
+    let inserted = 0;
+    for (const d of DIALOGUES) {
+      await conn.query(
+        `INSERT INTO quest_dialogues
+          (quest_id, sequence_order, npc_name, npc_text,
+           option_a_text, option_b_text, option_c_text,
+           option_a_correct, option_b_correct, option_c_correct,
+           suspicion_penalty, context_notes)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 1, 0, 0, 10, ?)`,
+        [
+          d.quest_id, d.sequence_order, d.npc_name, d.npc_text,
+          d.option_a_text, d.option_b_text, d.option_c_text,
+          d.context_notes
+        ]
+      );
+      inserted++;
+    }
+
+    // 4. Activate quests that have dialogues
+    const questIdsWithDialogues = [...new Set(DIALOGUES.map(d => d.quest_id))];
+    if (questIdsWithDialogues.length > 0) {
+      await conn.query(
+        `UPDATE quests SET status = 'active' WHERE id IN (${questIdsWithDialogues.map(() => '?').join(',')})`,
+        questIdsWithDialogues
+      );
+    }
+
+    await conn.commit();
+
+    res.json({
+      message: `Import complete: ${inserted} dialogues inserted, ${QUEST_UPDATES.length} quest titles updated, ${delResult.affectedRows} old dialogues removed`,
+      inserted,
+      questsUpdated: QUEST_UPDATES.length,
+      deleted: delResult.affectedRows
+    });
+  } catch (err) {
+    if (conn) await conn.rollback();
+    next(err);
+  } finally {
+    if (conn) conn.release();
+  }
+});
+
 module.exports = router;
