@@ -8,19 +8,39 @@
 // QUEST TITLE & DESCRIPTION UPDATES
 // ============================================================
 const QUEST_UPDATES = [
+  // MQ 1: The Mask of Simoun
   { id: 1, title: 'The Divided Steamer', description: 'Based on El Fili Ch.I-II. Setting: The steamer Tabo on the Pasig River.' },
   { id: 2, title: 'Legends and Land', description: 'Based on El Fili Ch.III-IV. Setting: The steamer Tabo, with the story of Cabesang Tales.' },
   { id: 3, title: 'Christmas Eve in San Diego', description: 'Based on El Fili Ch.V-VI. Setting: San Diego during Christmas Eve.' },
   { id: 4, title: 'The Man Behind the Goggles', description: 'Based on El Fili Ch.VII-VIII. Setting: The forest near Basilio\'s mother\'s grave.' },
-  { id: 5, title: 'Anchor Cutscene: The Mask of Simoun', description: 'Anchor cutscene for Main Quest 1. Simoun revealed, Suspicion Meter challenge.' },
+  
+  // MQ 2: Power and Education
   { id: 6, title: 'Blame and Blood', description: 'Based on El Fili Ch.IX-X. Setting: Cabesang Tales\' story of injustice continues.' },
   { id: 7, title: 'Power and the Student', description: 'Based on El Fili Ch.XI-XII. Setting: Los Baños and the University.' },
   { id: 8, title: 'The Humiliation of Learning', description: 'Based on El Fili Ch.XIII-XIV. Setting: The University physics class and students\' gathering.' },
   { id: 9, title: 'Cowardice and Conspiracy', description: 'Based on El Fili Ch.XV-XVI. Setting: Señor Pasta\'s office and Quiroga\'s house.' },
-  { id: 10, title: 'Anchor Cutscene: Power and Education', description: 'Anchor cutscene for Main Quest 2. Education system problem, unlock MQ3.' },
+  
+  // MQ 3: The Fuse is Lit
   { id: 11, title: 'The Fair and the Talking Head', description: 'Based on El Fili Ch.XVII-XVIII. Setting: Quiapo Fair and Mr. Leeds\' exhibit.' },
   { id: 12, title: 'The Spark Beneath Manila', description: 'Based on El Fili Ch.XIX-XX. Setting: Manila streets, Placido, and Don Custodio\'s decision.' },
   { id: 13, title: 'Masks at the Theater', description: 'Based on El Fili Ch.XXI-XXII. Setting: Manila theater and social scene.' },
+  { id: 14, title: 'Death and Dreams', description: 'Based on El Fili Ch.XXIII-XXIV. Setting: Simoun\'s plot and Maria Clara.' },
+
+  // MQ 4: Collapse and Consequences
+  { id: 16, title: 'Laughter Before the Arrests', description: 'Based on El Fili Ch.XXV-XXVI. Setting: The students\' banquet and the pasquinades.' },
+  { id: 17, title: 'The Friar and the Fear', description: 'Based on El Fili Ch.XXVII-XXVIII. Setting: Padre Fernandez and the city\'s panic.' },
+  { id: 18, title: 'Death Reaches Tiani', description: 'Based on El Fili Ch.XXIX-XXX. Setting: Capitan Tiago\'s death and Juli\'s tragedy.' },
+  { id: 19, title: 'The Innocent Sacrifice', description: 'Based on El Fili Ch.XXXI-XXXII. Setting: The aftermath of Juli and the student arrests.' },
+
+  // MQ 5: The Lamp Conspiracy
+  { id: 21, title: 'The Final Argument', description: 'Based on El Fili Ch.XXXIII-XXXIV. Setting: Simoun\'s final preparations and the wedding feast.' },
+  { id: 22, title: 'The Lamp of Death', description: 'Based on El Fili Ch.XXXV-XXXVI. Setting: The fiesta, the lamp, and Isagani\'s intervention.' },
+
+  // MQ 6: The Fall of Simoun
+  { id: 26, title: 'The Mystery and the Fatal Encounter', description: 'Based on El Fili Ch.XXXVII-XXXVIII. Setting: The discovery of the plot and the shootout.' },
+
+  // MQ 7: Final Boss
+  { id: 31, title: 'The End of Simoun', description: 'Based on El Fili Ch.XXXIX. Setting: Padre Florentino\'s house by the sea, the final confession.' }
 ];
 
 // ============================================================
