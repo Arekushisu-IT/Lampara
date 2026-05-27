@@ -13,13 +13,13 @@ const QUEST_UPDATES = [
   { id: 2, title: 'Legends and Land', description: 'Based on El Fili Ch.III-IV. Setting: The steamer Tabo, with the story of Cabesang Tales.' },
   { id: 3, title: 'Christmas Eve in San Diego', description: 'Based on El Fili Ch.V-VI. Setting: San Diego during Christmas Eve.' },
   { id: 4, title: 'The Man Behind the Goggles', description: 'Based on El Fili Ch.VII-VIII. Setting: The forest near Basilio\'s mother\'s grave.' },
-  
+
   // MQ 2: Power and Education
   { id: 6, title: 'Blame and Blood', description: 'Based on El Fili Ch.IX-X. Setting: Cabesang Tales\' story of injustice continues.' },
   { id: 7, title: 'Power and the Student', description: 'Based on El Fili Ch.XI-XII. Setting: Los Baños and the University.' },
   { id: 8, title: 'The Humiliation of Learning', description: 'Based on El Fili Ch.XIII-XIV. Setting: The University physics class and students\' gathering.' },
   { id: 9, title: 'Cowardice and Conspiracy', description: 'Based on El Fili Ch.XV-XVI. Setting: Señor Pasta\'s office and Quiroga\'s house.' },
-  
+
   // MQ 3: The Fuse is Lit
   { id: 11, title: 'The Fair and the Talking Head', description: 'Based on El Fili Ch.XVII-XVIII. Setting: Quiapo Fair and Mr. Leeds\' exhibit.' },
   { id: 12, title: 'The Spark Beneath Manila', description: 'Based on El Fili Ch.XIX-XX. Setting: Manila streets, Placido, and Don Custodio\'s decision.' },
@@ -593,4 +593,5 @@ const DIALOGUES = [
 // EXPORTS
 // ============================================================
 module.exports = { QUEST_UPDATES, DIALOGUES };
+
 

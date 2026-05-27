@@ -49,7 +49,7 @@ router.get('/chapter/:chapter', verifyToken, authorize('admin', 'staff'), async 
 });
 
 // Get quest by ID
-router.get('/:id', verifyToken, authorize('admin', 'staff'), async (req, res, next) => {
+router.get('/:id(\\d+)', verifyToken, authorize('admin', 'staff'), async (req, res, next) => {
   const { id } = req.params;
 
   try {
@@ -131,7 +131,7 @@ router.post('/batch-main-quest', verifyToken, authorize('admin', 'staff'), async
 });
 
 // Update quest (with validation)
-router.put('/:id', verifyToken, authorize('admin', 'staff'), validateQuestUpdate, validate, async (req, res, next) => {
+router.put('/:id(\\d+)', verifyToken, authorize('admin', 'staff'), validateQuestUpdate, validate, async (req, res, next) => {
   const { id } = req.params;
   const { chapter, title, description, artifact_resource_path, status } = req.body;
 
@@ -203,7 +203,7 @@ router.put('/bulk-status/:chapter/:mainQuest', verifyToken, authorize('admin', '
 });
 
 // Delete quest
-router.delete('/:id', verifyToken, authorize('admin'), async (req, res, next) => {
+router.delete('/:id(\\d+)', verifyToken, authorize('admin'), async (req, res, next) => {
   const { id } = req.params;
 
   try {
@@ -224,7 +224,7 @@ router.delete('/:id', verifyToken, authorize('admin'), async (req, res, next) =>
 // ============================================================
 
 // Get all dialogues for a quest
-router.get('/:id/dialogues', verifyToken, authorize('admin', 'staff'), async (req, res, next) => {
+router.get('/:id(\\d+)/dialogues', verifyToken, authorize('admin', 'staff'), async (req, res, next) => {
   const { id } = req.params;
 
   try {
@@ -249,7 +249,7 @@ router.get('/:id/dialogues', verifyToken, authorize('admin', 'staff'), async (re
 });
 
 // Create a dialogue entry for a quest
-router.post('/:id/dialogues', verifyToken, authorize('admin', 'staff'), async (req, res, next) => {
+router.post('/:id(\\d+)/dialogues', verifyToken, authorize('admin', 'staff'), async (req, res, next) => {
   const { id } = req.params;
   const {
     sequence_order,
