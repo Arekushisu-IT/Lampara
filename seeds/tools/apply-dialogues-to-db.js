@@ -3,6 +3,7 @@ require('dotenv').config({ path: path.join(__dirname, '..', '..', '.env') });
 
 const db = require('../../db');
 const { QUEST_UPDATES, DIALOGUES } = require('../generated/seed-dialogues');
+const { normalizeImportedDialogues } = require('../../src/utils/dialogueImport');
 
 const INSERT_COLUMNS = [
   'quest_id',
@@ -45,7 +46,7 @@ async function ensureDialogueColumns(connection) {
 }
 
 function buildInsertRows() {
-  return DIALOGUES.map(dialogue => [
+  return normalizeImportedDialogues(DIALOGUES).map(dialogue => [
     dialogue.quest_id,
     dialogue.sequence_order,
     dialogue.npc_name,

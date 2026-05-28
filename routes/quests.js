@@ -8,6 +8,7 @@ const authorize = require('../src/middleware/authorize');
 const { NotFoundError, ValidationError } = require('../src/utils/errors');
 const { validateQuestCreate, validateQuestUpdate, validate } = require('../src/middleware/validation');
 const { buildOptionDeltas } = require('../src/utils/dialogues');
+const { normalizeImportedDialogues } = require('../src/utils/dialogueImport');
 
 const router = express.Router();
 
@@ -452,9 +453,11 @@ router.post('/import-dialogues', verifyToken, authorize('admin', 'staff'), async
     // 2. Delete ALL existing dialogues (clean slate)
     const [delResult] = await conn.query('DELETE FROM quest_dialogues');
 
+    const normalizedDialogues = normalizeImportedDialogues(DIALOGUES);
+
     // 3. Insert all dialogues
     let inserted = 0;
-    for (const d of DIALOGUES) {
+    for (const d of normalizedDialogues) {
       await conn.query(
         `INSERT INTO quest_dialogues
           (quest_id, sequence_order, npc_name, npc_text,
@@ -479,7 +482,7 @@ router.post('/import-dialogues', verifyToken, authorize('admin', 'staff'), async
     }
 
     // 4. Activate quests that have dialogues
-    const questIdsWithDialogues = [...new Set(DIALOGUES.map(d => d.quest_id))];
+    const questIdsWithDialogues = [...new Set(normalizedDialogues.map(d => d.quest_id))];
     if (questIdsWithDialogues.length > 0) {
       await conn.query(
         `UPDATE quests SET status = 'active' WHERE id IN (${questIdsWithDialogues.map(() => '?').join(',')})`,
