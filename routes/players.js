@@ -249,6 +249,7 @@ router.post('/:id/complete-quest', verifyToken, async (req, res, next) => {
     return res.status(403).json({ error: 'Forbidden: cannot complete another player\'s quest' });
   }
 
+  let conn;
   try {
     // 0. Validate that quest_id exists in the database before inserting
     // Unity sends calculated quest_id — if it doesn't exist, resolve by chapter/main_quest/sub_quest
@@ -266,8 +267,12 @@ router.post('/:id/complete-quest', verifyToken, async (req, res, next) => {
       resolvedQuestId = questResolve[0].id;
     }
 
+    // Use a transaction so quest completion + XP/level update are atomic
+    conn = await pool.getConnection();
+    await conn.beginTransaction();
+
     // 1. Log the quest as 'completed' in the player_quests table
-    await pool.query(
+    await conn.query(
       `INSERT INTO player_quests (player_id, quest_id, status, progress_percent, completed_at)
        VALUES (?, ?, 'completed', 100, CURRENT_TIMESTAMP)
        ON DUPLICATE KEY UPDATE status = 'completed', progress_percent = 100, completed_at = CURRENT_TIMESTAMP`,
@@ -275,8 +280,11 @@ router.post('/:id/complete-quest', verifyToken, async (req, res, next) => {
     );
 
     // 2. Fetch the player's current stats
-    const [players] = await pool.query('SELECT level, experience, chapter FROM players WHERE id = ?', [id]);
-    if (players.length === 0) return res.status(404).json({ error: 'Player not found' });
+    const [players] = await conn.query('SELECT level, experience, chapter FROM players WHERE id = ?', [id]);
+    if (players.length === 0) {
+      await conn.rollback();
+      return res.status(404).json({ error: 'Player not found' });
+    }
 
     let { level, experience, chapter } = players[0];
 
@@ -295,10 +303,12 @@ router.post('/:id/complete-quest', verifyToken, async (req, res, next) => {
     }
 
     // 5. Update the player's current quest progression
-    await pool.query(
+    await conn.query(
       'UPDATE players SET current_quest_id = ?, current_sub_quest = ?, level = ?, experience = ?, chapter = ? WHERE id = ?',
       [currentMainQuest, currentSubQuest, level, experience, chapter, id]
     );
+
+    await conn.commit();
 
     res.json({
       message: 'Quest Completed!',
@@ -308,8 +318,11 @@ router.post('/:id/complete-quest', verifyToken, async (req, res, next) => {
     });
 
   } catch (err) {
+    if (conn) await conn.rollback();
     console.error("Progression Error:", err);
     next(err);
+  } finally {
+    if (conn) conn.release();
   }
 });
 

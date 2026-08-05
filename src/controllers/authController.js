@@ -1,8 +1,37 @@
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 
 const bcryptjs = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const pool = require('../../db');
+
+const localAdminAuthPath = path.resolve(__dirname, '../../../Lampara-Local-Dev/local-admin-auth.js');
+let localAdminAuth = null;
+
+if (fs.existsSync(localAdminAuthPath)) {
+  try {
+    localAdminAuth = require(localAdminAuthPath);
+  } catch (error) {
+    console.error('Failed to load local admin auth module:', error.message);
+  }
+}
+
+function normalizeEmail(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function getLocalAdminConfig() {
+  if (!localAdminAuth || typeof localAdminAuth.isEnabled !== 'function') {
+    return null;
+  }
+
+  if (!localAdminAuth.isEnabled()) {
+    return null;
+  }
+
+  return localAdminAuth.getConfiguredAdmin();
+}
 
 /**
  * Send an email via Google Apps Script webhook.
@@ -41,6 +70,26 @@ const adminLogin = async (req, res, next) => {
   try {
     const { email, password } = req.body;
     if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
+
+    const localAdmin = getLocalAdminConfig();
+    if (localAdmin && normalizeEmail(email) === normalizeEmail(localAdmin.email)) {
+      const passwordMatch = localAdmin.passwordHash
+        ? await bcryptjs.compare(password, localAdmin.passwordHash)
+        : password === localAdmin.password;
+
+      if (!passwordMatch) return res.status(401).json({ error: 'Invalid email or password' });
+
+      const token = jwt.sign(
+        localAdminAuth.toTokenPayload(localAdmin),
+        process.env.JWT_SECRET,
+        { expiresIn: process.env.JWT_EXPIRATION || '4h' }
+      );
+
+      return res.json({
+        token,
+        user: localAdminAuth.toResponseUser(localAdmin)
+      });
+    }
 
     const [users] = await pool.query('SELECT * FROM Admin_User WHERE email = ?', [email]);
     if (users.length === 0) return res.status(401).json({ error: 'Invalid email or password' });
@@ -146,6 +195,15 @@ const getMe = async (req, res, next) => {
         }
       });
     } else {
+      const localAdmin = getLocalAdminConfig();
+      if (req.user.local_dev_admin) {
+        if (!localAdmin || normalizeEmail(req.user.email) !== normalizeEmail(localAdmin.email)) {
+          return res.status(401).json({ error: 'Local admin session is not available' });
+        }
+
+        return res.json({ user: localAdminAuth.toResponseUser(localAdmin) });
+      }
+
       const [users] = await pool.query('SELECT id, email, name, role, status FROM Admin_User WHERE id = ?', [req.user.id]);
       if (users.length === 0) return res.status(401).json({ error: 'User not found' });
       const user = users[0];

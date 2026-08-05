@@ -116,19 +116,28 @@ router.post('/batch-main-quest', verifyToken, authorize('admin', 'staff'), async
   const { chapter, main_quest, status = 'standby' } = req.body;
   if (!chapter || !main_quest) return res.status(400).json({ error: 'chapter and main_quest are required' });
 
+  let conn;
   try {
+    conn = await pool.getConnection();
+    await conn.beginTransaction();
+
     let created = 0;
     for (let sq = 1; sq <= 5; sq++) {
-      await pool.query(
+      await conn.query(
         'INSERT INTO quests (chapter, main_quest, sub_quest, title, description, status) VALUES (?, ?, ?, ?, ?, ?)',
         [chapter, main_quest, sq, `Standby`, `Awaiting storyboard content.`, status]
       );
       created++;
     }
+
+    await conn.commit();
     res.status(201).json({ message: `Main Quest ${main_quest} created with ${created} sub quests`, created });
   } catch (err) {
+    if (conn) await conn.rollback();
     if (err.code === 'ER_DUP_ENTRY') return res.status(400).json({ error: 'Some sub quests in this Main Quest already exist.' });
     next(err);
+  } finally {
+    if (conn) conn.release();
   }
 });
 
