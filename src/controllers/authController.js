@@ -21,6 +21,46 @@ function normalizeEmail(value) {
   return String(value || '').trim().toLowerCase();
 }
 
+/**
+ * FR5/FR6: fetch the player's in-progress metrics for the quest they are
+ * currently on, so a mid-quest counter survives logout/login.
+ *
+ * players.current_quest_id holds the MAIN QUEST NUMBER (not a quests.id FK),
+ * so the quest row is resolved by (chapter, main_quest, sub_quest) — the same
+ * way POST /players/:id/save-checkpoint resolves it.
+ *
+ * Deliberately fail-safe: any error (most likely the quest_metrics migration
+ * not being applied yet) returns zeros rather than breaking the login path.
+ */
+async function getCurrentQuestMetrics(player) {
+  const fallback = { failure_count: 0, artifacts_found: 0 };
+
+  if (!player || !player.chapter || !player.current_quest_id || !player.current_sub_quest) {
+    return fallback;
+  }
+
+  try {
+    const [rows] = await pool.query(
+      `SELECT pq.failure_count, pq.artifacts_found
+         FROM quests q
+         JOIN player_quests pq ON pq.quest_id = q.id AND pq.player_id = ?
+        WHERE q.chapter = ? AND q.main_quest = ? AND q.sub_quest = ?
+        LIMIT 1`,
+      [player.id, player.chapter, player.current_quest_id, player.current_sub_quest]
+    );
+
+    if (rows.length === 0) return fallback;
+
+    return {
+      failure_count: rows[0].failure_count || 0,
+      artifacts_found: rows[0].artifacts_found || 0
+    };
+  } catch (err) {
+    console.warn('[auth] Could not load quest metrics (run migrations/quest_metrics.sql):', err.message);
+    return fallback;
+  }
+}
+
 function getLocalAdminConfig() {
   if (!localAdminAuth || typeof localAdminAuth.isEnabled !== 'function') {
     return null;
@@ -141,6 +181,8 @@ const playerLogin = async (req, res, next) => {
     // Turn them ONLINE
     await pool.query('UPDATE players SET last_login = CURRENT_TIMESTAMP, is_online = true WHERE id = ?', [player.id]);
 
+    const metrics = await getCurrentQuestMetrics(player);
+
     return res.json({
       message: 'Login successful',
       token,
@@ -150,7 +192,9 @@ const playerLogin = async (req, res, next) => {
         has_completed_tutorial: !!player.has_completed_tutorial,
         current_main_quest: player.current_quest_id,
         current_sub_quest: player.current_sub_quest,
-        chapter: player.chapter
+        chapter: player.chapter,
+        failure_count: metrics.failure_count,
+        artifacts_found: metrics.artifacts_found
       }
     });
   } catch (err) {
@@ -184,6 +228,8 @@ const getMe = async (req, res, next) => {
       if (players.length === 0) return res.status(401).json({ error: 'Player not found' });
 
       const player = players[0];
+      const metrics = await getCurrentQuestMetrics(player);
+
       return res.json({
         user: {
           id: player.id, name: player.name, username: player.username, email: player.email,
@@ -191,7 +237,9 @@ const getMe = async (req, res, next) => {
           has_completed_tutorial: !!player.has_completed_tutorial,
           current_main_quest: player.current_quest_id,
           current_sub_quest: player.current_sub_quest,
-          chapter: player.chapter
+          chapter: player.chapter,
+          failure_count: metrics.failure_count,
+          artifacts_found: metrics.artifacts_found
         }
       });
     } else {

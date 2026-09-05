@@ -238,7 +238,10 @@ router.post('/update-quest-status', verifyToken, async (req, res, next) => {
 // ==========================================
 router.post('/:id/complete-quest', verifyToken, async (req, res, next) => {
   const { id } = req.params; // The Player's ID
-  const { currentMainQuest, currentSubQuest, quest_id, xp_reward, advance_to_chapter } = req.body;
+  const {
+    currentMainQuest, currentSubQuest, quest_id, xp_reward, advance_to_chapter,
+    failure_count, artifacts_found
+  } = req.body;
 
   // Security: Players can only complete their own quests
   // Admin/staff can complete any player's quest
@@ -271,12 +274,27 @@ router.post('/:id/complete-quest', verifyToken, async (req, res, next) => {
     conn = await pool.getConnection();
     await conn.beginTransaction();
 
-    // 1. Log the quest as 'completed' in the player_quests table
-    await conn.query(
-      `INSERT INTO player_quests (player_id, quest_id, status, progress_percent, completed_at)
-       VALUES (?, ?, 'completed', 100, CURRENT_TIMESTAMP)
-       ON DUPLICATE KEY UPDATE status = 'completed', progress_percent = 100, completed_at = CURRENT_TIMESTAMP`,
+    // 1a. Idempotency guard: was this quest ALREADY completed?
+    //     Must be read before the upsert below, which sets status='completed'.
+    //     A repeat completion still records metrics and advances position,
+    //     but awards ZERO XP -- otherwise replaying a quest farms XP forever.
+    const [existingQuest] = await conn.query(
+      "SELECT status FROM player_quests WHERE player_id = ? AND quest_id = ? FOR UPDATE",
       [id, resolvedQuestId]
+    );
+    const isRepeatCompletion = existingQuest.length > 0 && existingQuest[0].status === 'completed';
+
+    // 1b. Log the quest as 'completed' in the player_quests table
+    //    failure_count / artifacts_found are the FR5-FR7 metrics Unity reports
+    //    for this quest run. On a replay the latest run's numbers win.
+    await conn.query(
+      `INSERT INTO player_quests
+         (player_id, quest_id, status, progress_percent, failure_count, artifacts_found, completed_at)
+       VALUES (?, ?, 'completed', 100, ?, ?, CURRENT_TIMESTAMP)
+       ON DUPLICATE KEY UPDATE status = 'completed', progress_percent = 100,
+         failure_count = VALUES(failure_count), artifacts_found = VALUES(artifacts_found),
+         completed_at = CURRENT_TIMESTAMP`,
+      [id, resolvedQuestId, failure_count || 0, artifacts_found || 0]
     );
 
     // 2. Fetch the player's current stats
@@ -289,12 +307,14 @@ router.post('/:id/complete-quest', verifyToken, async (req, res, next) => {
     let { level, experience, chapter } = players[0];
 
     // 3. Add the XP and handle "Leveling Up"
-    experience += (xp_reward || 500); // Default to 500 XP if not specified
-    let xpNeededForNextLevel = level * 1000;
+    //    Repeat completions award nothing (see the idempotency guard above).
+    const effectiveXpReward = isRepeatCompletion ? 0 : (xp_reward || 500);
+    experience += effectiveXpReward;
 
-    if (experience >= xpNeededForNextLevel) {
-      level += 1; // Level up!
-      experience -= xpNeededForNextLevel; // Keep rollover XP
+    // while, not if: a single large reward can cross more than one level boundary
+    while (experience >= level * 1000) {
+      experience -= level * 1000; // Keep rollover XP
+      level += 1;                 // Level up!
     }
 
     // 4. Advance Chapter (Only if Unity tells us they finished a Main Chapter)
@@ -311,15 +331,98 @@ router.post('/:id/complete-quest', verifyToken, async (req, res, next) => {
     await conn.commit();
 
     res.json({
-      message: 'Quest Completed!',
+      message: isRepeatCompletion ? 'Quest already completed - no XP awarded.' : 'Quest Completed!',
       newLevel: level,
       newExperience: experience,
-      newChapter: chapter
+      newChapter: chapter,
+      xpAwarded: effectiveXpReward,
+      repeatCompletion: isRepeatCompletion
     });
 
   } catch (err) {
     if (conn) await conn.rollback();
     console.error("Progression Error:", err);
+    next(err);
+  } finally {
+    if (conn) conn.release();
+  }
+});
+
+// ==========================================
+// POST: SAVE MID-QUEST CHECKPOINT
+// Lets the Unity Pause Menu "Save Game" persist progress server-side
+// so a player can resume on another device.
+// ==========================================
+router.post('/:id/save-checkpoint', verifyToken, async (req, res, next) => {
+  const { id } = req.params;
+  const { currentMainQuest, currentSubQuest, currentSuspicion, failureCount, artifactsFound } = req.body;
+
+  if (currentMainQuest === undefined || currentSubQuest === undefined) {
+    return res.status(400).json({ error: 'currentMainQuest and currentSubQuest are required' });
+  }
+
+  // Security: players can only checkpoint themselves; admin/staff can do any player
+  const userRole = req.user.role;
+  const userId = req.user.id;
+
+  if (userRole !== 'admin' && userRole !== 'staff' && Number(userId) !== Number(id)) {
+    return res.status(403).json({ error: 'Forbidden: cannot save another player\'s checkpoint' });
+  }
+
+  let conn;
+  try {
+    conn = await pool.getConnection();
+    await conn.beginTransaction();
+
+    const [players] = await conn.query('SELECT chapter, suspicion FROM players WHERE id = ?', [id]);
+    if (players.length === 0) {
+      await conn.rollback();
+      return res.status(404).json({ error: 'Player not found' });
+    }
+
+    const suspicion = currentSuspicion === undefined ? players[0].suspicion : currentSuspicion;
+
+    await conn.query(
+      'UPDATE players SET current_quest_id = ?, current_sub_quest = ?, suspicion = ? WHERE id = ?',
+      [currentMainQuest, currentSubQuest, suspicion, id]
+    );
+
+    // Persist the in-progress failure count against the quest the player is on.
+    // Resolve the quest row from the player's current chapter; skip silently if
+    // that combination has no quest (e.g. an anchor cutscene not yet seeded).
+    let questId = null;
+    if (failureCount !== undefined || artifactsFound !== undefined) {
+      const [questRows] = await conn.query(
+        'SELECT id FROM quests WHERE chapter = ? AND main_quest = ? AND sub_quest = ?',
+        [players[0].chapter, currentMainQuest, currentSubQuest]
+      );
+
+      if (questRows.length > 0) {
+        questId = questRows[0].id;
+        // Never downgrade an already-completed quest back to in_progress.
+        await conn.query(
+          `INSERT INTO player_quests (player_id, quest_id, status, failure_count, artifacts_found)
+           VALUES (?, ?, 'in_progress', ?, ?)
+           ON DUPLICATE KEY UPDATE
+             failure_count = VALUES(failure_count),
+             artifacts_found = VALUES(artifacts_found),
+             status = IF(status = 'completed', 'completed', 'in_progress')`,
+          [id, questId, failureCount || 0, artifactsFound || 0]
+        );
+      }
+    }
+
+    await conn.commit();
+
+    res.json({
+      message: 'Checkpoint saved',
+      current_quest_id: currentMainQuest,
+      current_sub_quest: currentSubQuest,
+      suspicion,
+      quest_id: questId
+    });
+  } catch (err) {
+    if (conn) await conn.rollback();
     next(err);
   } finally {
     if (conn) conn.release();
@@ -348,7 +451,9 @@ router.get('/:id/progression', verifyToken, authorize('admin', 'staff'), async (
     // 2. Fetch all quests grouped by chapter
     const [allQuests] = await pool.query(
       `SELECT q.id, q.chapter, q.main_quest, q.sub_quest, q.title, q.status,
-       pq.status as player_status, pq.progress_percent, pq.completed_at
+       q.artifacts_total,
+       pq.status as player_status, pq.progress_percent, pq.completed_at,
+       pq.failure_count, pq.artifacts_found
        FROM quests q
        LEFT JOIN player_quests pq ON pq.quest_id = q.id AND pq.player_id = ?
        WHERE q.status = 'active'
@@ -360,6 +465,9 @@ router.get('/:id/progression', verifyToken, authorize('admin', 'staff'), async (
     const chaptersMap = {};
     let totalSubQuests = 0;
     let completedSubQuests = 0;
+    let totalFailures = 0;
+    let totalArtifactsFound = 0;
+    let totalArtifactsAvailable = 0;
 
     allQuests.forEach(q => {
       if (!chaptersMap[q.chapter]) {
@@ -377,12 +485,23 @@ router.get('/:id/progression', verifyToken, authorize('admin', 'staff'), async (
       const isCompleted = q.player_status === 'completed';
       if (isCompleted) completedSubQuests++;
 
+      const failureCount = q.failure_count || 0;
+      const artifactsFound = q.artifacts_found || 0;
+      const artifactsTotal = q.artifacts_total || 0;
+
+      totalFailures += failureCount;
+      totalArtifactsFound += artifactsFound;
+      totalArtifactsAvailable += artifactsTotal;
+
       chaptersMap[q.chapter].quests[q.main_quest].sub_quests.push({
         sub_quest: q.sub_quest,
         quest_id: q.id,
         title: q.title,
         status: isCompleted ? 'completed' : (q.player_status || 'not_started'),
         progress_percent: q.progress_percent || 0,
+        failure_count: failureCount,
+        artifacts_found: artifactsFound,
+        artifacts_total: artifactsTotal,
         completed_at: q.completed_at
       });
     });
@@ -412,6 +531,11 @@ router.get('/:id/progression', verifyToken, authorize('admin', 'staff'), async (
       ? Math.round((completedSubQuests / totalSubQuests) * 100)
       : 0;
 
+    // FR5: Artifact Completion Rate — R = (found / total) * 100
+    const artifactCompletionRate = totalArtifactsAvailable > 0
+      ? Math.round((totalArtifactsFound / totalArtifactsAvailable) * 100)
+      : 0;
+
     res.json({
       player_id: player.id,
       player_name: player.name,
@@ -422,6 +546,10 @@ router.get('/:id/progression', verifyToken, authorize('admin', 'staff'), async (
       overall_progress: overallProgress,
       completed_sub_quests: completedSubQuests,
       total_sub_quests: totalSubQuests,
+      total_failures: totalFailures,
+      artifacts_found: totalArtifactsFound,
+      artifacts_total: totalArtifactsAvailable,
+      artifact_completion_rate: artifactCompletionRate,
       chapters
     });
   } catch (err) {

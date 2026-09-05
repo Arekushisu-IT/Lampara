@@ -16,7 +16,7 @@ const router = express.Router();
 router.get('/', verifyToken, authorize('admin', 'staff'), async (req, res, next) => {
   try {
     const [quests] = await pool.query(
-      `SELECT q.id, q.chapter, q.main_quest, q.sub_quest, q.title, q.description, q.artifact_resource_path, q.status,
+      `SELECT q.id, q.chapter, q.main_quest, q.sub_quest, q.title, q.description, q.artifact_resource_path, q.artifacts_total, q.status,
        (SELECT COUNT(*) FROM players p WHERE p.current_quest_id = q.id) as player_count
        FROM quests q ORDER BY q.chapter, q.main_quest, q.sub_quest`
     );
@@ -144,7 +144,7 @@ router.post('/batch-main-quest', verifyToken, authorize('admin', 'staff'), async
 // Update quest (with validation)
 router.put('/:id(\\d+)', verifyToken, authorize('admin', 'staff'), validateQuestUpdate, validate, async (req, res, next) => {
   const { id } = req.params;
-  const { chapter, title, description, artifact_resource_path, status } = req.body;
+  const { chapter, title, description, artifact_resource_path, artifacts_total, status } = req.body;
 
   try {
     let updateQuery = 'UPDATE quests SET ';
@@ -166,6 +166,14 @@ router.put('/:id(\\d+)', verifyToken, authorize('admin', 'staff'), validateQuest
     if (artifact_resource_path !== undefined) {
       updates.push('artifact_resource_path = ?');
       values.push(artifact_resource_path);
+    }
+    if (artifacts_total !== undefined) {
+      const total = Number(artifacts_total);
+      if (!Number.isInteger(total) || total < 0) {
+        throw new ValidationError('artifacts_total must be a non-negative integer');
+      }
+      updates.push('artifacts_total = ?');
+      values.push(total);
     }
     if (status !== undefined) {
       updates.push('status = ?');

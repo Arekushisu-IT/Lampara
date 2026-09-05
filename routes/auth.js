@@ -17,26 +17,28 @@ const { adminLogin, playerLogin, playerLogout, getMe, adminRegister, playerRegis
 // RATE LIMITERS FOR AUTH ENDPOINTS
 // ============================================================
 
-// Login rate limiter: 5 failed attempts per 10 minutes
+// Login rate limiter
+// TODO: REVERT AFTER BETA → max: 5, windowMs: 10 * 60 * 1000
 const loginLimiter = rateLimit({
-  windowMs: 10 * 60 * 1000,
-  max: 5,
+  windowMs: 5 * 60 * 1000,       // BETA: 5 min (was 10 min)
+  max: 20,                        // BETA: 20 (was 5)
   skipSuccessfulRequests: true,
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => rateLimit.ipKeyGenerator(req),
-  message: { error: 'Too many login attempts. Please try again after 10 minutes.' }
+  message: { error: 'Too many login attempts. Please try again after 5 minutes.' }
 });
 
-// Player registration rate limiter: 3 registrations per 1 hour
+// Player registration rate limiter
+// TODO: REVERT AFTER BETA → max: 3, windowMs: 60 * 60 * 1000
 const playerRegistrationLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000,
-  max: 3,
+  windowMs: 30 * 60 * 1000,      // BETA: 30 min (was 60 min)
+  max: 30,                        // BETA: 30 (was 3)
   skipSuccessfulRequests: true,
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => rateLimit.ipKeyGenerator(req),
-  message: { error: 'Too many registration attempts. Please try again after 1 hour.' }
+  message: { error: 'Too many registration attempts. Please try again after 30 minutes.' }
 });
 
 // Admin registration rate limiter: 3 registrations per 1 hour
@@ -50,10 +52,11 @@ const adminRegistrationLimiter = rateLimit({
   message: { error: 'Too many registration attempts. Please try again after 1 hour.' }
 });
 
-// Username check rate limiter: 30 requests per 15 minutes
+// Username check rate limiter
+// TODO: REVERT AFTER BETA → max: 30
 const usernameCheckLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 30,
+  max: 100,                       // BETA: 100 (was 30)
   message: { error: 'Too many username checks. Please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,

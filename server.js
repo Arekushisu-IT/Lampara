@@ -32,10 +32,11 @@ if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'your_super_secret_key
 // RATE LIMITING CONFIGURATION
 // ============================================================
 
-// General API rate limit: 100 requests per 15 minutes
+// General API rate limit
+// TODO: REVERT AFTER BETA → max: 100
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  max: 500,                        // BETA: 500 (was 100)
   message: { error: 'Too many requests. Please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,

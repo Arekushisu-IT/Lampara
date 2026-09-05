@@ -55,6 +55,7 @@
 # title               | varchar(255)                      |
 # description         | text                              |
 # artifact_resource_path| varchar(255)                    | nullable, AR artifact path
+# artifacts_total     | int                               | default 0, FR5 denominator
 # status              | enum('active','inactive','archived') |
 # created_at          | timestamp                         |
 # updated_at          | timestamp                         |
@@ -69,6 +70,8 @@
 # quest_id            | int                               | FK → quests.id
 # status              | enum('in_progress','completed')   |
 # progress_percent    | int                               | default 0
+# failure_count       | int                               | default 0, FR6 "Cover Blown" count
+# artifacts_found     | int                               | default 0, FR5 numerator
 # completed_at        | timestamp                         | nullable
 # created_at          | timestamp                         |
 # updated_at          | timestamp                         |
