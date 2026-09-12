@@ -375,7 +375,10 @@ router.post('/:id/complete-quest', verifyToken, async (req, res, next) => {
 // ==========================================
 router.post('/:id/save-checkpoint', verifyToken, async (req, res, next) => {
   const { id } = req.params;
-  const { currentMainQuest, currentSubQuest, currentSuspicion, failureCount, artifactsFound } = req.body;
+  const {
+    currentMainQuest, currentSubQuest, currentSuspicion, suspicionSeq,
+    failureCount, artifactsFound
+  } = req.body;
 
   if (currentMainQuest === undefined || currentSubQuest === undefined) {
     return res.status(400).json({ error: 'currentMainQuest and currentSubQuest are required' });
@@ -394,18 +397,75 @@ router.post('/:id/save-checkpoint', verifyToken, async (req, res, next) => {
     conn = await pool.getConnection();
     await conn.beginTransaction();
 
-    const [players] = await conn.query('SELECT chapter, suspicion FROM players WHERE id = ?', [id]);
+    const [players] = await conn.query(
+      'SELECT chapter, suspicion, suspicion_seq FROM players WHERE id = ? FOR UPDATE', [id]);
     if (players.length === 0) {
       await conn.rollback();
       return res.status(404).json({ error: 'Player not found' });
     }
 
-    const suspicion = currentSuspicion === undefined ? players[0].suspicion : currentSuspicion;
+    // ----------------------------------------------------------------
+    // Suspicion write, guarded by a monotonic sequence number.
+    //
+    // suspicion is a running 0-100 meter that moves in BOTH directions: it rises on
+    // a wrong choice, falls on a streak bonus, and resets to 0 when a failure at 100
+    // restarts the sub-quest. So it cannot use the GREATEST() merge that makes
+    // failure_count and artifacts_found idempotent -- given two values there is no
+    // way to tell which is newer.
+    //
+    // That matters because the client's live send path does not check whether its
+    // offline queue is non-empty before firing, so a request queued while offline can
+    // be overtaken by a later live one and then replayed on top of it. Without this
+    // guard a stale "suspicion = 100" can land after a fresh "suspicion = 0", and the
+    // player is restored into a permanent game over on next login.
+    //
+    // Three cases:
+    //   - no currentSuspicion        -> leave the stored value alone (unchanged behaviour)
+    //   - currentSuspicion, no seq   -> apply unconditionally, so existing APKs that
+    //                                   predate G4 keep working through the rollout
+    //   - currentSuspicion + seq     -> apply only when the payload is newer
+    //
+    // Deliberately NOT applied to current_quest_id / current_sub_quest: the sequence
+    // counts dialogue choices, and a player can change position without making one
+    // (finishing a sub-quest, quitting from a cutscene). Gating position on a choice
+    // counter would silently reject legitimate progress.
+    // ----------------------------------------------------------------
+    const storedSuspicion = players[0].suspicion;
+    const storedSeq = players[0].suspicion_seq || 0;
 
-    await conn.query(
-      'UPDATE players SET current_quest_id = ?, current_sub_quest = ?, suspicion = ? WHERE id = ?',
-      [currentMainQuest, currentSubQuest, suspicion, id]
-    );
+    const hasSuspicion = currentSuspicion !== undefined && currentSuspicion !== null;
+    const parsedSeq = Number(suspicionSeq);
+    const hasSeq = Number.isInteger(parsedSeq) && parsedSeq >= 0;
+
+    const suspicion = hasSuspicion
+      ? Math.max(0, Math.min(100, Number(currentSuspicion) || 0))
+      : storedSuspicion;
+
+    // A rejected write is NOT an error. It must still return 2xx so the client's
+    // offline queue consumes and discards it instead of retrying it forever.
+    const suspicionApplied = hasSuspicion && (!hasSeq || parsedSeq > storedSeq);
+    const nextSeq = hasSeq ? Math.max(storedSeq, parsedSeq) : storedSeq;
+
+    if (suspicionApplied) {
+      await conn.query(
+        `UPDATE players SET current_quest_id = ?, current_sub_quest = ?,
+           suspicion = ?, suspicion_seq = ? WHERE id = ?`,
+        [currentMainQuest, currentSubQuest, suspicion, nextSeq, id]
+      );
+    } else {
+      // Position still advances -- only the suspicion write was stale.
+      await conn.query(
+        `UPDATE players SET current_quest_id = ?, current_sub_quest = ?,
+           suspicion_seq = ? WHERE id = ?`,
+        [currentMainQuest, currentSubQuest, nextSeq, id]
+      );
+      if (hasSuspicion) {
+        console.warn(
+          `[save-checkpoint] Stale suspicion write for player ${id} ignored ` +
+          `(seq ${parsedSeq} <= stored ${storedSeq}).`
+        );
+      }
+    }
 
     // Persist the in-progress failure count against the quest the player is on.
     // Resolve the quest row from the player's current chapter; skip silently if
@@ -440,7 +500,12 @@ router.post('/:id/save-checkpoint', verifyToken, async (req, res, next) => {
       message: 'Checkpoint saved',
       current_quest_id: currentMainQuest,
       current_sub_quest: currentSubQuest,
-      suspicion,
+      // The value now in the database, which is NOT what was sent when the write was
+      // rejected as stale. The client should reconcile against this rather than assume
+      // its own number won.
+      suspicion: suspicionApplied ? suspicion : storedSuspicion,
+      suspicion_seq: nextSeq,
+      suspicion_applied: suspicionApplied,
       quest_id: questId
     });
   } catch (err) {

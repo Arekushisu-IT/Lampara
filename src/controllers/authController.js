@@ -194,6 +194,7 @@ const playerLogin = async (req, res, next) => {
         current_sub_quest: player.current_sub_quest,
         chapter: player.chapter,
         suspicion: player.suspicion,
+        suspicion_seq: player.suspicion_seq,
         failure_count: metrics.failure_count,
         artifacts_found: metrics.artifacts_found
       }
@@ -227,7 +228,7 @@ const getMe = async (req, res, next) => {
     if (req.user.role === 'player') {
       const [players] = await pool.query(
         'SELECT id, username, name, email, level, experience, status, has_completed_tutorial, ' +
-        'current_quest_id, current_sub_quest, chapter, suspicion FROM players WHERE id = ?',
+        'current_quest_id, current_sub_quest, chapter, suspicion, suspicion_seq FROM players WHERE id = ?',
         [req.user.id]
       );
       if (players.length === 0) return res.status(401).json({ error: 'Player not found' });
@@ -244,6 +245,7 @@ const getMe = async (req, res, next) => {
           current_sub_quest: player.current_sub_quest,
           chapter: player.chapter,
           suspicion: player.suspicion,
+          suspicion_seq: player.suspicion_seq,
           failure_count: metrics.failure_count,
           artifacts_found: metrics.artifacts_found
         }
