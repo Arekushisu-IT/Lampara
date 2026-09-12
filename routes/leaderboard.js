@@ -8,10 +8,11 @@ const router = express.Router();
 /**
  * Unified Ranking Strategy:
  *   1. Quest Progress (DESC)     — players further in the story rank higher
- *   2. Suspicion ASC              — fewer wrong dialogue choices = better rank
- *   3. Updated At (DESC)         — recent activity breaks ties
+ *   2. Total Failures ASC        — FR6 "Cover Blown" count, fewer = better rank
+ *   3. Suspicion ASC             — current meter breaks ties between equal failures
+ *   4. Updated At (DESC)         — recent activity breaks the remaining ties
  */
-const RANKING_ORDER = 'questProgress DESC, p.suspicion ASC, p.updated_at DESC';
+const RANKING_ORDER = 'questProgress DESC, totalFailures ASC, p.suspicion ASC, p.updated_at DESC';
 
 // ---------- shared helpers ----------
 
@@ -25,7 +26,8 @@ function buildRanking(playerRow, index) {
     currentQuest:    playerRow.current_quest_id,
     currentSubQuest: playerRow.current_sub_quest,
     chapter:         playerRow.chapter,
-    failCount:       playerRow.suspicion || 0,    // wrong dialogue choices
+    failCount:       playerRow.totalFailures || 0,  // FR6: game-overs, from player_quests
+    suspicion:       playerRow.suspicion || 0,      // current meter, not a fail count
     questsCompleted: playerRow.questsCompleted || 0,
     isActive:        playerRow.isActive === 1,
     createdAt:       playerRow.created_at,
@@ -54,15 +56,19 @@ const BASE_SELECT = `
     ),
     0
   ) as questProgress,
-  COALESCE(pq.quests_completed, 0) as questsCompleted
+  COALESCE(pq.quests_completed, 0) as questsCompleted,
+  COALESCE(pq.total_failures, 0)    as totalFailures
 `;
 
 const FROM_AND_JOINS = `
 FROM players p
 LEFT JOIN (
-  SELECT player_id, COUNT(*) as quests_completed
+  -- The status filter moved into the COUNT so failures recorded on in-progress and
+  -- failed rows are still summed; leaving it in the WHERE would drop them silently.
+  SELECT player_id,
+         COUNT(CASE WHEN status = 'completed' THEN 1 END) as quests_completed,
+         SUM(failure_count)                               as total_failures
   FROM player_quests
-  WHERE status = 'completed'
   GROUP BY player_id
 ) pq ON p.id = pq.player_id
 `;
@@ -170,42 +176,42 @@ router.get('/top/:count', verifyToken, async (req, res, next) => {
         p.current_sub_quest,
         p.suspicion,
         p.status,
+        COALESCE(pq.total_failures, 0) as totalFailures,
         ROUND(p.current_quest_id * 50 + p.current_sub_quest * 7, 0) as questProgress
       FROM players p
+      LEFT JOIN (
+        SELECT player_id, SUM(failure_count) as total_failures
+        FROM player_quests
+        GROUP BY player_id
+      ) pq ON p.id = pq.player_id
       WHERE p.status = 'active'
-      ORDER BY questProgress DESC, p.suspicion ASC, p.updated_at DESC
+      ORDER BY questProgress DESC, totalFailures ASC, p.suspicion ASC, p.updated_at DESC
       LIMIT ?
     `;
 
     const [topPlayers] = await pool.query(query, [parsedCount]);
 
+    // Built once. The previous version mapped this list a second time inside the
+    // response and read raw-row keys (p.current_quest_id, p.suspicion) off the
+    // already-mapped objects, so currentQuest / currentSubQuest came back undefined
+    // and failCount was always 0.
     const topRankings = topPlayers.map((p, idx) => ({
       rank:            idx + 1,
       playerId:        p.playerId,
       playerName:      p.playerName,
       email:           p.email,
-      questProgress:   p.questProgress || 0,
+      questProgress:   Math.min(100, p.questProgress || 0),
       currentQuest:    p.current_quest_id,
       currentSubQuest: p.current_sub_quest,
       chapter:         p.chapter,
-      failCount:       p.suspicion || 0,
+      failCount:       p.totalFailures || 0,
+      suspicion:       p.suspicion || 0,
       status:          p.status
     }));
 
     res.json({
       success:   true,
-      topPlayers: topRankings.map((p, idx) => ({
-        rank:            idx + 1,
-        playerId:        p.playerId,
-        playerName:      p.playerName,
-        email:           p.email,
-        questProgress:   Math.min(100, p.questProgress || 0),
-        currentQuest:    p.current_quest_id,
-        currentSubQuest: p.current_sub_quest,
-        chapter:         p.chapter,
-        failCount:       p.suspicion || 0,
-        status:          p.status
-      })),
+      topPlayers: topRankings,
       count:     topRankings.length,
       timestamp: new Date().toISOString()
     });

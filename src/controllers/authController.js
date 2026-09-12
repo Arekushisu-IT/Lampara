@@ -193,6 +193,7 @@ const playerLogin = async (req, res, next) => {
         current_main_quest: player.current_quest_id,
         current_sub_quest: player.current_sub_quest,
         chapter: player.chapter,
+        suspicion: player.suspicion,
         failure_count: metrics.failure_count,
         artifacts_found: metrics.artifacts_found
       }
@@ -224,7 +225,11 @@ const playerLogout = async (req, res, next) => {
 const getMe = async (req, res, next) => {
   try {
     if (req.user.role === 'player') {
-      const [players] = await pool.query('SELECT id, username, name, email, level, experience, status, has_completed_tutorial, current_quest_id, current_sub_quest, chapter FROM players WHERE id = ?', [req.user.id]);
+      const [players] = await pool.query(
+        'SELECT id, username, name, email, level, experience, status, has_completed_tutorial, ' +
+        'current_quest_id, current_sub_quest, chapter, suspicion FROM players WHERE id = ?',
+        [req.user.id]
+      );
       if (players.length === 0) return res.status(401).json({ error: 'Player not found' });
 
       const player = players[0];
@@ -238,6 +243,7 @@ const getMe = async (req, res, next) => {
           current_main_quest: player.current_quest_id,
           current_sub_quest: player.current_sub_quest,
           chapter: player.chapter,
+          suspicion: player.suspicion,
           failure_count: metrics.failure_count,
           artifacts_found: metrics.artifacts_found
         }
@@ -303,12 +309,28 @@ const playerRegister = async (req, res, next) => {
     const token = crypto.randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
+    // New players start at game_config.suspicion_start rather than a hardcoded 0,
+    // so the admin Game Settings screen keeps control of the value. A missing or
+    // unparseable key falls back to 0 instead of failing the registration.
+    // NOTE: the main-quest SuspicionMeter still hardcodes its tuning constants, so
+    // this value only reaches the tutorial until the client reads /api/game/config.
+    let startingSuspicion = 0;
+    const [startRows] = await pool.query(
+      "SELECT config_value FROM game_config WHERE config_key = 'suspicion_start'"
+    );
+    if (startRows.length > 0) {
+      const parsed = parseInt(startRows[0].config_value, 10);
+      if (Number.isInteger(parsed)) {
+        startingSuspicion = Math.max(0, Math.min(100, parsed));
+      }
+    }
+
     // Insert player as inactive with token
     await pool.query(
       `INSERT INTO players
        (name, username, password, email, birthdate, level, experience, status, chapter, suspicion, verify_token, token_expires_at)
-       VALUES (?, ?, ?, ?, ?, 1, 0, 'inactive', 1, 0, ?, ?)`,
-      [name, username, hashedPassword, email || null, birthdate, token, expiresAt]
+       VALUES (?, ?, ?, ?, ?, 1, 0, 'inactive', 1, ?, ?, ?)`,
+      [name, username, hashedPassword, email || null, birthdate, startingSuspicion, token, expiresAt]
     );
 
     // Send verification email if email provided

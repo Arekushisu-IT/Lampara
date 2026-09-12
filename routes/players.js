@@ -240,7 +240,7 @@ router.post('/:id/complete-quest', verifyToken, async (req, res, next) => {
   const { id } = req.params; // The Player's ID
   const {
     currentMainQuest, currentSubQuest, quest_id, xp_reward, advance_to_chapter,
-    failure_count, artifacts_found
+    failure_count, artifacts_found, currentSuspicion
   } = req.body;
 
   // Security: Players can only complete their own quests
@@ -254,20 +254,20 @@ router.post('/:id/complete-quest', verifyToken, async (req, res, next) => {
 
   let conn;
   try {
-    // 0. Validate that quest_id exists in the database before inserting
-    // Unity sends calculated quest_id — if it doesn't exist, resolve by chapter/main_quest/sub_quest
-    let resolvedQuestId = quest_id;
-    const [questCheck] = await pool.query('SELECT id FROM quests WHERE id = ?', [quest_id]);
+    // 0. Resolve the quest row.
+    //    quest_id is authoritative: it identifies the quest the player just COMPLETED.
+    //    currentMainQuest / currentSubQuest are the player's NEW position after
+    //    advancing, so they must NOT be used to resolve this row -- the old
+    //    (chapter, main_quest, sub_quest) fallback resolved to the *next* quest and
+    //    would have filed the completion against the wrong row. Removed, not reordered.
+    const resolvedQuestId = Number(quest_id);
+    if (!Number.isInteger(resolvedQuestId) || resolvedQuestId < 1) {
+      return res.status(400).json({ error: 'quest_id is required and must be a positive integer' });
+    }
 
+    const [questCheck] = await pool.query('SELECT id FROM quests WHERE id = ?', [resolvedQuestId]);
     if (questCheck.length === 0) {
-      // Quest_id doesn't exist in DB, try to resolve by chapter/main_quest/sub_quest
-      const [questResolve] = await pool.query(
-        'SELECT id FROM quests WHERE chapter = ? AND main_quest = ? AND sub_quest = ?',
-        [advance_to_chapter || 1, currentMainQuest, currentSubQuest]
-      );
-
-      if (questResolve.length === 0) return res.status(404).json({ error: 'Quest not found in database — cannot complete quest' });
-      resolvedQuestId = questResolve[0].id;
+      return res.status(404).json({ error: 'Quest not found in database — cannot complete quest' });
     }
 
     // Use a transaction so quest completion + XP/level update are atomic
@@ -284,15 +284,20 @@ router.post('/:id/complete-quest', verifyToken, async (req, res, next) => {
     );
     const isRepeatCompletion = existingQuest.length > 0 && existingQuest[0].status === 'completed';
 
-    // 1b. Log the quest as 'completed' in the player_quests table
-    //    failure_count / artifacts_found are the FR5-FR7 metrics Unity reports
-    //    for this quest run. On a replay the latest run's numbers win.
+    // 1b. Log the quest as 'completed' in the player_quests table.
+    //    failure_count / artifacts_found are the FR5-FR7 metrics Unity reports.
+    //    Both are MONOTONIC -- GREATEST, not a blind overwrite. The client sends a
+    //    running absolute total, so replaying a quest cleanly used to overwrite the
+    //    recorded failures with a lower number and the lifetime record could fall.
+    //    Monotonic also makes the write idempotent, so a redelivered offline
+    //    request is a harmless no-op.
     await conn.query(
       `INSERT INTO player_quests
          (player_id, quest_id, status, progress_percent, failure_count, artifacts_found, completed_at)
        VALUES (?, ?, 'completed', 100, ?, ?, CURRENT_TIMESTAMP)
        ON DUPLICATE KEY UPDATE status = 'completed', progress_percent = 100,
-         failure_count = VALUES(failure_count), artifacts_found = VALUES(artifacts_found),
+         failure_count   = GREATEST(failure_count,   VALUES(failure_count)),
+         artifacts_found = GREATEST(artifacts_found, VALUES(artifacts_found)),
          completed_at = CURRENT_TIMESTAMP`,
       [id, resolvedQuestId, failure_count || 0, artifacts_found || 0]
     );
@@ -308,7 +313,11 @@ router.post('/:id/complete-quest', verifyToken, async (req, res, next) => {
 
     // 3. Add the XP and handle "Leveling Up"
     //    Repeat completions award nothing (see the idempotency guard above).
-    const effectiveXpReward = isRepeatCompletion ? 0 : (xp_reward || 500);
+    // XP is a property of the quest, not something the client gets to nominate.
+    // xp_reward still arrives on the wire from older builds; it is deliberately ignored.
+    // TODO: move to a quests.xp_reward column so the award can vary per quest.
+    const QUEST_XP = 500;
+    const effectiveXpReward = isRepeatCompletion ? 0 : QUEST_XP;
     experience += effectiveXpReward;
 
     // while, not if: a single large reward can cross more than one level boundary
@@ -318,14 +327,25 @@ router.post('/:id/complete-quest', verifyToken, async (req, res, next) => {
     }
 
     // 4. Advance Chapter (Only if Unity tells us they finished a Main Chapter)
-    if (advance_to_chapter) {
-      chapter = advance_to_chapter;
+    // Chapter advances by at most one step and never moves backwards, so a patched
+    // client cannot jump straight to the endgame.
+    const requestedChapter = Number(advance_to_chapter);
+    if (Number.isInteger(requestedChapter) && requestedChapter > chapter) {
+      chapter = Math.min(requestedChapter, chapter + 1);
     }
 
     // 5. Update the player's current quest progression
+    // Suspicion is only written when the client actually sends it, so an older build
+    // that omits the field leaves the stored value alone rather than zeroing it.
+    const suspicion =
+      currentSuspicion === undefined || currentSuspicion === null
+        ? null
+        : Math.max(0, Math.min(100, Number(currentSuspicion) || 0));
+
     await conn.query(
-      'UPDATE players SET current_quest_id = ?, current_sub_quest = ?, level = ?, experience = ?, chapter = ? WHERE id = ?',
-      [currentMainQuest, currentSubQuest, level, experience, chapter, id]
+      `UPDATE players SET current_quest_id = ?, current_sub_quest = ?, level = ?,
+         experience = ?, chapter = ?, suspicion = COALESCE(?, suspicion) WHERE id = ?`,
+      [currentMainQuest, currentSubQuest, level, experience, chapter, suspicion, id]
     );
 
     await conn.commit();
@@ -400,12 +420,14 @@ router.post('/:id/save-checkpoint', verifyToken, async (req, res, next) => {
       if (questRows.length > 0) {
         questId = questRows[0].id;
         // Never downgrade an already-completed quest back to in_progress.
+        // Counters are monotonic here too -- this is the path OnSuspicionGameOver
+        // posts to, so it is what actually records an FR6 "Cover Blown" failure.
         await conn.query(
           `INSERT INTO player_quests (player_id, quest_id, status, failure_count, artifacts_found)
            VALUES (?, ?, 'in_progress', ?, ?)
            ON DUPLICATE KEY UPDATE
-             failure_count = VALUES(failure_count),
-             artifacts_found = VALUES(artifacts_found),
+             failure_count   = GREATEST(failure_count,   VALUES(failure_count)),
+             artifacts_found = GREATEST(artifacts_found, VALUES(artifacts_found)),
              status = IF(status = 'completed', 'completed', 'in_progress')`,
           [id, questId, failureCount || 0, artifactsFound || 0]
         );
