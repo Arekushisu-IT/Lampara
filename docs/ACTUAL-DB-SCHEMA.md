@@ -164,6 +164,7 @@ Indexes: **`uq_player_quest` (player_id, quest_id) UNIQUE**, `quest_id`
 | `updated_at` | timestamp | YES | | CURRENT_TIMESTAMP on update |
 | `is_online` | tinyint(1) | YES | | 0 |
 | `suspicion` | int | YES | | 0 |
+| `suspicion_seq` | int | NO | | 0 ⏳ |
 | `chapter` | int | YES | | 1 |
 | `verify_token` | varchar(128) | YES | UNIQUE | NULL |
 | `token_expires_at` | datetime | YES | | NULL |
@@ -179,6 +180,30 @@ Indexes: `uq_username` (unique), `idx_username`, `idx_status`, `idx_level`,
 > (1–7)**, *not* a foreign key into `quests.id`. `authController.js` maps it to
 > `current_main_quest` in API responses. To resolve the player's actual quest row, look
 > up `(chapter, main_quest, sub_quest)` — see the note under [`quests`](#quests).
+
+> ⏳ **`suspicion_seq` is NOT YET APPLIED.** It is defined in
+> `migrations/suspicion_sync.sql` and listed above so this doc tracks what is coming,
+> but the column does not exist in Railway yet. Apply it with
+> `node migrations/run-suspicion-sync.js --apply`, then delete this note. Every other
+> row on this page is verbatim from `INFORMATION_SCHEMA`.
+
+**The two suspicion columns, and why there are two:**
+
+- `suspicion` — a running **0–100 meter**, not a lifetime total. It rises on a wrong
+  dialogue choice, falls on a streak bonus (`game_config.suspicion_streak_bonus`), and
+  resets to 0 only when a failure at 100 restarts the sub-quest. It carries across
+  sub-quest boundaries and across sessions. New players are seeded from
+  `game_config.suspicion_start` at registration.
+- `suspicion_seq` — a monotonic write counter. Because `suspicion` moves in **both**
+  directions it cannot be merged with `GREATEST()` the way `failure_count` and
+  `artifacts_found` are; there is no value-only rule that makes a write idempotent. The
+  client bumps this on every registered choice, and the server applies a write only when
+  the incoming seq exceeds the stored one — which makes a replayed offline write a
+  harmless no-op instead of a corruption.
+
+> Do not confuse `players.suspicion` with `player_quests.failure_count`. Suspicion is the
+> live meter; `failure_count` counts how many times that meter actually reached 100 on a
+> given quest. The leaderboard's `failCount` reports the latter.
 
 ---
 

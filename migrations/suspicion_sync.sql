@@ -1,0 +1,43 @@
+-- ============================================================
+-- LAMPARA Suspicion Sync Migration (BK1)
+-- Run this BEFORE deploying the backend code that reads
+-- suspicion_seq (the ordering guard in routes/players.js).
+--
+-- Prefer the runner, which checks INFORMATION_SCHEMA first:
+--   node migrations/run-suspicion-sync.js            # dry run
+--   node migrations/run-suspicion-sync.js --apply    # execute
+--
+-- NOT idempotent as raw SQL -- MySQL has no ADD COLUMN IF NOT
+-- EXISTS. Re-running throws ER_DUP_FIELDNAME (1060), harmless.
+-- ============================================================
+
+-- suspicion_seq -- monotonic write counter for players.suspicion.
+--
+-- Why this column exists:
+--   players.suspicion is a running 0-100 meter. It RISES on a wrong dialogue
+--   choice, FALLS on a streak bonus, and resets to 0 when a failure at 100
+--   restarts the sub-quest. Because it moves in both directions it cannot be
+--   merged with GREATEST() the way failure_count and artifacts_found are --
+--   there is no value-only rule that makes a write idempotent.
+--
+--   That matters because the Unity client's offline queue can replay a stale
+--   write after a fresher one has already landed: APIClient's live send path
+--   does not check whether the queue is non-empty before firing, so a request
+--   queued while offline can be overtaken by a later live request and then
+--   replayed on reconnect. Without a guard that stale payload wins.
+--
+--   The client bumps suspicionSeq on every registered choice and sends it with
+--   each suspicion write. The server applies a write only when the incoming seq
+--   exceeds the stored one, which makes every write idempotent and every stale
+--   replay a harmless no-op.
+--
+-- DEFAULT 0 backfills every existing row, so the client's first real write
+-- (seq >= 1) is always accepted. No separate UPDATE is needed.
+ALTER TABLE players
+  ADD COLUMN suspicion_seq INT NOT NULL DEFAULT 0 AFTER suspicion;
+
+-- ------------------------------------------------------------
+-- Verification
+-- ------------------------------------------------------------
+-- SHOW COLUMNS FROM players LIKE 'suspicion%';
+-- SELECT id, username, suspicion, suspicion_seq FROM players ORDER BY id LIMIT 10;

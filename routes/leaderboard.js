@@ -28,6 +28,14 @@ function buildRanking(playerRow, index) {
     chapter:         playerRow.chapter,
     failCount:       playerRow.totalFailures || 0,  // FR6: game-overs, from player_quests
     suspicion:       playerRow.suspicion || 0,      // current meter, not a fail count
+
+    // Aliases for the Unity client. LeaderboardEntry (LeaderboardManager.cs) reads
+    // currentMainQuest / suspicionScore / codexCompletion; without these three the
+    // in-game leaderboard renders 0 in those columns. The web admin panel reads the
+    // names above, so both spellings are emitted rather than renaming either.
+    currentMainQuest: playerRow.current_quest_id,
+    suspicionScore:   playerRow.suspicion || 0,
+    codexCompletion:  Math.min(100, playerRow.codexCompletion || 0),
     questsCompleted: playerRow.questsCompleted || 0,
     isActive:        playerRow.isActive === 1,
     createdAt:       playerRow.created_at,
@@ -57,7 +65,15 @@ const BASE_SELECT = `
     0
   ) as questProgress,
   COALESCE(pq.quests_completed, 0) as questsCompleted,
-  COALESCE(pq.total_failures, 0)    as totalFailures
+  COALESCE(pq.total_failures, 0)    as totalFailures,
+  -- FR5 artifact completion, aggregated across every ACTIVE quest. Reads 0 while
+  -- quests.artifacts_total is unpopulated (19 of 22 active quests are still 0), so
+  -- this only becomes meaningful once real per-quest artifact counts are entered.
+  ROUND(
+    COALESCE(pq.total_artifacts, 0) * 100.0 /
+    GREATEST((SELECT COALESCE(SUM(artifacts_total), 0) FROM quests WHERE status = 'active'), 1),
+    0
+  ) as codexCompletion
 `;
 
 const FROM_AND_JOINS = `
@@ -67,7 +83,8 @@ LEFT JOIN (
   -- failed rows are still summed; leaving it in the WHERE would drop them silently.
   SELECT player_id,
          COUNT(CASE WHEN status = 'completed' THEN 1 END) as quests_completed,
-         SUM(failure_count)                               as total_failures
+         SUM(failure_count)                               as total_failures,
+         SUM(artifacts_found)                             as total_artifacts
   FROM player_quests
   GROUP BY player_id
 ) pq ON p.id = pq.player_id
@@ -206,6 +223,9 @@ router.get('/top/:count', verifyToken, async (req, res, next) => {
       chapter:         p.chapter,
       failCount:       p.totalFailures || 0,
       suspicion:       p.suspicion || 0,
+      // Aliases the Unity LeaderboardEntry reads -- see buildRanking above.
+      currentMainQuest: p.current_quest_id,
+      suspicionScore:   p.suspicion || 0,
       status:          p.status
     }));
 
