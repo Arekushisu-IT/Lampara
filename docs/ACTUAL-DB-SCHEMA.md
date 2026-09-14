@@ -1,6 +1,6 @@
 # Lampara — Actual Database Schema
 
-**Last captured:** 2026-09-12 · `quests` / `player_quests` re-verified 2026-09-14 after `migrations/quest_chapters.sql`
+**Last captured:** 2026-09-12 · `quests` / `player_quests` re-verified 2026-09-14 after `migrations/quest_chapters.sql` and `migrations/artifact_data.sql`
 **Source:** Railway MySQL (`shortline.proxy.rlwy.net:20695`), database `lampara_database`
 **Captured from:** `INFORMATION_SCHEMA` — column types, keys, defaults and indexes are verbatim.
 
@@ -286,6 +286,14 @@ Indexes: **`uq_mq_sq` (main_quest, sub_quest) UNIQUE** — the lookup key,
 `uq_chapter_mq_sq` (chapter, main_quest, sub_quest) UNIQUE (legacy), `idx_chapter`, `idx_status`
 
 - `artifacts_total` — **FR5**: denominator of `R = (artifacts_found / artifacts_total) × 100`.
+  **1 for every sub-quest** — the game has exactly one AR artifact per sub-quest, and the AR scan
+  stops after the first correct find. A quest "holds an artifact" when this is > 0; the API counts
+  `artifacts_found` at most once per quest (three game scripts can record the same artifact).
+- `artifact_resource_path` — the Unity `Resources` prefab path of the sub-quest's AR artifact, copied
+  from the MQ scenes' `SubQuestSequenceConfig` (all 20 set). The game loads this value in preference
+  to its Inspector copy, so a wrong path breaks that sub-quest's AR spawn. It also names the artifact in
+  the glossary (`GET /players/:id/artifacts`), e.g. `PassageOfTheTabo_Artifact` → "Passage Of The Tabo".
+  19 distinct prefabs: MQ6-SQ1 reuses MQ2-SQ4's `QuirogasCrate`, as configured in Unity.
 - `chapter_start` / `chapter_end` — the **El Filibusterismo book chapters** the sub-quest
   covers (e.g. MQ2-SQ4 = Ch. 15–16). Set for all 20 rows by `migrations/quest_chapters.sql`.
 - `chapter` — **legacy, always `1`. Not a lookup key and not a book chapter.** Kept because
@@ -350,3 +358,9 @@ Columns added 2026-09-05 for FR5/FR6/FR7 (`migrations/quest_metrics.sql`):
   that player's real SQ4 row, with 0 failures and 0 artifacts.
 - Added `quests.chapter_start`, `quests.chapter_end`, and `UNIQUE uq_mq_sq (main_quest, sub_quest)`.
 - Restore file: `migrations/backups/quest_cleanup_2026-09-14T03-17-36-382Z.sql` (local, not committed).
+
+**2026-09-14 — `migrations/artifact_data.sql`** (runner: `run-artifact-data.js`), data only:
+- Set `artifact_resource_path` for all 20 quests from the Unity MQ scenes (after Plastic changeset 120),
+  and `artifacts_total = 1` for each (previously 3 quests had 1, the rest 0; every path was empty).
+- Verified after apply: 0 empty paths, `SUM(artifacts_total)` = 20, 0 rows with `artifacts_found > artifacts_total`.
+- Restore file: `migrations/backups/artifact_data_2026-09-14T04-33-52-907Z.sql` (local, not committed).
