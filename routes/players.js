@@ -19,7 +19,7 @@ router.get('/', verifyToken, authorize('admin', 'staff'), async (req, res, next)
     const [players] = await pool.query(
       `SELECT p.id, p.name, p.username, p.email, p.birthdate, p.level, p.experience,
               p.status, ${onlineSql('p')} AS is_online, p.chapter, p.suspicion, p.current_quest_id,
-              p.current_sub_quest, p.created_at,
+              p.current_sub_quest, p.created_at, p.token_expires_at,
               (SELECT cq.chapter_start FROM quests cq WHERE cq.main_quest = p.current_quest_id AND cq.sub_quest = p.current_sub_quest) as book_chapter_start,
               (SELECT cq.chapter_end FROM quests cq WHERE cq.main_quest = p.current_quest_id AND cq.sub_quest = p.current_sub_quest) as book_chapter_end,
               (SELECT COUNT(*) FROM player_quests apq JOIN quests aq ON aq.id = apq.quest_id WHERE apq.player_id = p.id AND apq.artifacts_found > 0 AND aq.artifacts_total > 0 AND aq.status = 'active') as artifacts_collected,
