@@ -398,7 +398,7 @@ router.post('/:id/save-checkpoint', verifyToken, async (req, res, next) => {
     await conn.beginTransaction();
 
     const [players] = await conn.query(
-      'SELECT chapter, suspicion, suspicion_seq FROM players WHERE id = ? FOR UPDATE', [id]);
+      'SELECT suspicion, suspicion_seq FROM players WHERE id = ? FOR UPDATE', [id]);
     if (players.length === 0) {
       await conn.rollback();
       return res.status(404).json({ error: 'Player not found' });
@@ -468,13 +468,16 @@ router.post('/:id/save-checkpoint', verifyToken, async (req, res, next) => {
     }
 
     // Persist the in-progress failure count against the quest the player is on.
-    // Resolve the quest row from the player's current chapter; skip silently if
-    // that combination has no quest (e.g. an anchor cutscene not yet seeded).
+    // The quest row is identified by (main_quest, sub_quest) ONLY. `chapter` is not a
+    // lookup key: every quests row stores chapter = 1, while players.chapter holds the
+    // main-quest number, so including it matched nothing past MQ1 and every MQ2+
+    // in-progress failure/artifact was silently dropped. Skip silently if the position
+    // has no quest row (e.g. the slot after the final quest).
     let questId = null;
     if (failureCount !== undefined || artifactsFound !== undefined) {
       const [questRows] = await conn.query(
-        'SELECT id FROM quests WHERE chapter = ? AND main_quest = ? AND sub_quest = ?',
-        [players[0].chapter, currentMainQuest, currentSubQuest]
+        'SELECT id FROM quests WHERE main_quest = ? AND sub_quest = ?',
+        [currentMainQuest, currentSubQuest]
       );
 
       if (questRows.length > 0) {

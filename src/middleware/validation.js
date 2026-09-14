@@ -158,8 +158,9 @@ const validatePlayerUpdate = [
 // QUEST CREATE
 // ============================================================
 const validateQuestCreate = [
+  // Legacy column, not a lookup key -- optional, defaults to 1 in the route.
   body('chapter')
-    .notEmpty().withMessage('Chapter is required.')
+    .optional({ nullable: true })
     .isInt({ min: 1, max: 13 }).withMessage('Chapter must be between 1 and 13.')
     .toInt(),
 
@@ -179,14 +180,15 @@ const validateQuestCreate = [
     .optional()
     .isIn(['active', 'standby', 'completed', 'archived']).withMessage('Invalid status value.'),
 
+  // Bounded so the id formula (main_quest - 1) * 5 + sub_quest stays collision-free.
   body('main_quest')
-    .optional({ nullable: true })
-    .isInt({ min: 1 }).withMessage('Main quest must be a positive number.')
+    .notEmpty().withMessage('Main quest is required.')
+    .isInt({ min: 1, max: 7 }).withMessage('Main quest must be between 1 and 7.')
     .toInt(),
 
   body('sub_quest')
-    .optional({ nullable: true })
-    .isInt({ min: 1 }).withMessage('Sub quest must be a positive number.')
+    .notEmpty().withMessage('Sub quest is required.')
+    .isInt({ min: 1, max: 5 }).withMessage('Sub quest must be between 1 and 5.')
     .toInt()
 ];
 

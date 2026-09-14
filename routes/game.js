@@ -12,17 +12,21 @@ const router = express.Router();
 // Unity Game Client fetches all dialogue content for a specific sub-quest
 // ============================================================
 router.get('/quest-content/:chapter/:quest/:subquest', verifyToken, async (req, res, next) => {
-  const { chapter, quest, subquest } = req.params;
+  // :chapter stays in the URL for installed APKs but is ignored. The game sends the
+  // main-quest number there while every quests row stores chapter = 1, so filtering on
+  // it 404'd every sub-quest past MQ1 -- admin-edited dialogue and the AR artifact path
+  // never reached the game. (main_quest, sub_quest) identifies the row on its own.
+  const { quest, subquest } = req.params;
 
   try {
     // 1. Find the quest record
     const [quests] = await pool.query(
-      'SELECT id, chapter, main_quest, sub_quest, title, description, artifact_resource_path, status FROM quests WHERE chapter = ? AND main_quest = ? AND sub_quest = ?',
-      [chapter, quest, subquest]
+      'SELECT id, chapter, main_quest, sub_quest, title, description, artifact_resource_path, status FROM quests WHERE main_quest = ? AND sub_quest = ?',
+      [quest, subquest]
     );
 
     if (quests.length === 0) {
-      throw new NotFoundError(`Quest not found: Chapter ${chapter}, Quest ${quest}, Sub-Quest ${subquest}`);
+      throw new NotFoundError(`Quest not found: MQ${quest} SQ${subquest}`);
     }
 
     const questData = quests[0];
@@ -63,7 +67,8 @@ router.get('/quest-content/:chapter/:quest/:subquest', verifyToken, async (req, 
 // Performs UPSERT: UPDATE if quest_id+sequence_order exists, INSERT otherwise
 // ============================================================
 router.post('/save-dialogues/:chapter/:quest/:subquest', verifyToken, authorize('admin', 'staff'), async (req, res, next) => {
-  const { chapter, quest, subquest } = req.params;
+  // :chapter is ignored for the same reason as GET /quest-content above.
+  const { quest, subquest } = req.params;
   const { dialogues } = req.body;
 
   if (!Array.isArray(dialogues) || dialogues.length === 0) {
@@ -77,13 +82,13 @@ router.post('/save-dialogues/:chapter/:quest/:subquest', verifyToken, authorize(
 
     // 1. Look up quest_id
     const [quests] = await conn.query(
-      'SELECT id FROM quests WHERE chapter = ? AND main_quest = ? AND sub_quest = ?',
-      [chapter, quest, subquest]
+      'SELECT id FROM quests WHERE main_quest = ? AND sub_quest = ?',
+      [quest, subquest]
     );
 
     if (quests.length === 0) {
       await conn.rollback();
-      return res.status(404).json({ error: `Quest not found: Chapter ${chapter}, Quest ${quest}, Sub-Quest ${subquest}` });
+      return res.status(404).json({ error: `Quest not found: MQ${quest} SQ${subquest}` });
     }
 
     const questId = quests[0].id;
@@ -170,7 +175,9 @@ router.get('/config', verifyToken, async (req, res, next) => {
 
 // ============================================================
 // GET /api/game/quest-list/:chapter
-// Unity fetches all quests for a chapter (for quest selection screen)
+// Unity fetches the playable quest list (for quest selection screen).
+// :chapter is kept for URL compatibility but ignored -- it is not a meaningful
+// filter (every quests row stores chapter = 1), so all active quests are returned.
 // ============================================================
 router.get('/quest-list/:chapter', verifyToken, async (req, res, next) => {
   const { chapter } = req.params;
@@ -179,10 +186,9 @@ router.get('/quest-list/:chapter', verifyToken, async (req, res, next) => {
     const [quests] = await pool.query(
       `SELECT q.id, q.chapter, q.main_quest, q.sub_quest, q.title, q.description, q.artifact_resource_path, q.status,
        (SELECT COUNT(*) FROM quest_dialogues qd WHERE qd.quest_id = q.id) as dialogue_count
-       FROM quests q 
-       WHERE q.chapter = ? AND q.status = 'active'
-       ORDER BY q.main_quest, q.sub_quest`,
-      [chapter]
+       FROM quests q
+       WHERE q.status = 'active'
+       ORDER BY q.main_quest, q.sub_quest`
     );
 
     res.json({

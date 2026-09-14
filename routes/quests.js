@@ -70,14 +70,15 @@ router.get('/:id(\\d+)', verifyToken, authorize('admin', 'staff'), async (req, r
   }
 });
 
-// Get quest by chapter and main_quest (for Unity client)
+// Get the sub quests of one main quest. :chapter is kept for URL compatibility but
+// ignored -- quests are identified by main_quest / sub_quest, not chapter.
 router.get('/chapter/:chapter/main/:mainQuest', verifyToken, authorize('admin', 'staff'), async (req, res, next) => {
   const { chapter, mainQuest } = req.params;
 
   try {
     const [quests] = await pool.query(
-      'SELECT * FROM quests WHERE chapter = ? AND main_quest = ? ORDER BY sub_quest',
-      [chapter, mainQuest]
+      'SELECT * FROM quests WHERE main_quest = ? ORDER BY sub_quest',
+      [mainQuest]
     );
 
     res.json({
@@ -92,52 +93,32 @@ router.get('/chapter/:chapter/main/:mainQuest', verifyToken, authorize('admin', 
 });
 
 // Create single sub quest (with validation)
+//
+// The id is set explicitly to (main_quest - 1) * 5 + sub_quest. The game computes
+// quest ids with that formula (SubQuestSequenceManager.CalculateQuestID), so a row
+// that took an AUTO_INCREMENT id (36, 37, ...) could never be found or completed.
+// validateQuestCreate bounds main_quest to 1-7 and sub_quest to 1-5 so the formula
+// cannot collide across main quests. `chapter` is legacy and not a lookup key; the
+// El Filibusterismo book-chapter range is stored separately.
 router.post('/', verifyToken, authorize('admin', 'staff'), validateQuestCreate, validate, async (req, res, next) => {
-  const { chapter, main_quest = 1, sub_quest = 1, title, description = '', status = 'active' } = req.body;
+  const { chapter = 1, main_quest, sub_quest, title, description = '', status = 'active' } = req.body;
+  const id = (main_quest - 1) * 5 + sub_quest;
 
   try {
-    const [result] = await pool.query(
-      'INSERT INTO quests (chapter, main_quest, sub_quest, title, description, status) VALUES (?, ?, ?, ?, ?, ?)',
-      [chapter, main_quest, sub_quest, title, description, status]
+    await pool.query(
+      'INSERT INTO quests (id, chapter, main_quest, sub_quest, title, description, status) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [id, chapter, main_quest, sub_quest, title, description, status]
     );
 
     res.status(201).json({
       message: 'Quest created successfully',
-      questId: result.insertId
+      questId: id
     });
   } catch (err) {
-    if (err.code === 'ER_DUP_ENTRY') return res.status(400).json({ error: 'A quest with this Chapter/MainQuest/SubQuest already exists.' });
-    next(err);
-  }
-});
-
-// Batch-create a full Main Quest with 5 empty sub quests
-router.post('/batch-main-quest', verifyToken, authorize('admin', 'staff'), async (req, res, next) => {
-  const { chapter, main_quest, status = 'standby' } = req.body;
-  if (!chapter || !main_quest) return res.status(400).json({ error: 'chapter and main_quest are required' });
-
-  let conn;
-  try {
-    conn = await pool.getConnection();
-    await conn.beginTransaction();
-
-    let created = 0;
-    for (let sq = 1; sq <= 5; sq++) {
-      await conn.query(
-        'INSERT INTO quests (chapter, main_quest, sub_quest, title, description, status) VALUES (?, ?, ?, ?, ?, ?)',
-        [chapter, main_quest, sq, `Standby`, `Awaiting storyboard content.`, status]
-      );
-      created++;
+    if (err.code === 'ER_DUP_ENTRY') {
+      return res.status(409).json({ error: `MQ${main_quest} SQ${sub_quest} already exists.` });
     }
-
-    await conn.commit();
-    res.status(201).json({ message: `Main Quest ${main_quest} created with ${created} sub quests`, created });
-  } catch (err) {
-    if (conn) await conn.rollback();
-    if (err.code === 'ER_DUP_ENTRY') return res.status(400).json({ error: 'Some sub quests in this Main Quest already exist.' });
     next(err);
-  } finally {
-    if (conn) conn.release();
   }
 });
 
@@ -199,17 +180,18 @@ router.put('/:id(\\d+)', verifyToken, authorize('admin', 'staff'), validateQuest
   }
 });
 
-// Bulk update status for all sub quests under a chapter + main_quest
+// Bulk update status for all sub quests under a main quest.
+// :chapter is kept for URL compatibility but ignored (not a lookup key).
 router.put('/bulk-status/:chapter/:mainQuest', verifyToken, authorize('admin', 'staff'), async (req, res, next) => {
-  const { chapter, mainQuest } = req.params;
+  const { mainQuest } = req.params;
   const { status } = req.body;
 
   if (!status) return res.status(400).json({ error: 'Status is required' });
 
   try {
     const [result] = await pool.query(
-      'UPDATE quests SET status = ? WHERE chapter = ? AND main_quest = ?',
-      [status, chapter, mainQuest]
+      'UPDATE quests SET status = ? WHERE main_quest = ?',
+      [status, mainQuest]
     );
 
     res.json({

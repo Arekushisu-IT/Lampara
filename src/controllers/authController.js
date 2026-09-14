@@ -26,8 +26,10 @@ function normalizeEmail(value) {
  * currently on, so a mid-quest counter survives logout/login.
  *
  * players.current_quest_id holds the MAIN QUEST NUMBER (not a quests.id FK),
- * so the quest row is resolved by (chapter, main_quest, sub_quest) — the same
- * way POST /players/:id/save-checkpoint resolves it.
+ * so the quest row is resolved by (main_quest, sub_quest) — the same way
+ * POST /players/:id/save-checkpoint resolves it. `chapter` is deliberately not
+ * part of the lookup: quests rows all store chapter = 1 while players.chapter
+ * holds the main-quest number, so including it failed for every player past MQ1.
  *
  * Deliberately fail-safe: any error (most likely the quest_metrics migration
  * not being applied yet) returns zeros rather than breaking the login path.
@@ -35,7 +37,7 @@ function normalizeEmail(value) {
 async function getCurrentQuestMetrics(player) {
   const fallback = { failure_count: 0, artifacts_found: 0 };
 
-  if (!player || !player.chapter || !player.current_quest_id || !player.current_sub_quest) {
+  if (!player || !player.current_quest_id || !player.current_sub_quest) {
     return fallback;
   }
 
@@ -44,9 +46,9 @@ async function getCurrentQuestMetrics(player) {
       `SELECT pq.failure_count, pq.artifacts_found
          FROM quests q
          JOIN player_quests pq ON pq.quest_id = q.id AND pq.player_id = ?
-        WHERE q.chapter = ? AND q.main_quest = ? AND q.sub_quest = ?
+        WHERE q.main_quest = ? AND q.sub_quest = ?
         LIMIT 1`,
-      [player.id, player.chapter, player.current_quest_id, player.current_sub_quest]
+      [player.id, player.current_quest_id, player.current_sub_quest]
     );
 
     if (rows.length === 0) return fallback;
