@@ -7,6 +7,7 @@ const verifyToken = require('../src/middleware/auth');
 const authorize = require('../src/middleware/authorize');
 const { NotFoundError, ValidationError } = require('../src/utils/errors');
 const { validatePlayerCreate, validatePlayerUpdate, validate } = require('../src/middleware/validation');
+const { artifactNameFromPath } = require('../src/utils/artifacts');
 
 const router = express.Router();
 
@@ -19,6 +20,8 @@ router.get('/', verifyToken, authorize('admin', 'staff'), async (req, res, next)
               p.current_sub_quest, p.created_at,
               (SELECT cq.chapter_start FROM quests cq WHERE cq.main_quest = p.current_quest_id AND cq.sub_quest = p.current_sub_quest) as book_chapter_start,
               (SELECT cq.chapter_end FROM quests cq WHERE cq.main_quest = p.current_quest_id AND cq.sub_quest = p.current_sub_quest) as book_chapter_end,
+              (SELECT COUNT(*) FROM player_quests apq JOIN quests aq ON aq.id = apq.quest_id WHERE apq.player_id = p.id AND apq.artifacts_found > 0 AND aq.artifacts_total > 0 AND aq.status = 'active') as artifacts_collected,
+              (SELECT COUNT(*) FROM quests aq WHERE aq.status = 'active' AND aq.artifacts_total > 0) as artifacts_total,
               COALESCE(ROUND((SELECT COUNT(*) FROM player_quests pq WHERE pq.player_id = p.id AND pq.status = 'completed') * 100.0 / NULLIF((SELECT COUNT(*) FROM quests WHERE status = 'active'), 0), 0), 0) as overall_progress
        FROM players p ORDER BY p.created_at DESC`
     );
@@ -591,7 +594,9 @@ router.get('/:id/progression', verifyToken, async (req, res, next) => {
       const artifactsTotal = q.artifacts_total || 0;
 
       totalFailures += failureCount;
-      totalArtifactsFound += artifactsFound;
+      // Capped at what the quest holds: more than one game script can record the
+      // same artifact, and the completion rate must never exceed 100%.
+      totalArtifactsFound += Math.min(artifactsFound, artifactsTotal);
       totalArtifactsAvailable += artifactsTotal;
 
       mainQuestMap[q.main_quest].sub_quests.push({
@@ -654,6 +659,68 @@ router.get('/:id/progression', verifyToken, async (req, res, next) => {
       artifacts_total: totalArtifactsAvailable,
       artifact_completion_rate: artifactCompletionRate,
       main_quests: mainQuests
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ============================================================
+// GET: PLAYER ARTIFACT COLLECTION (glossary data)
+// Every sub-quest's artifact in game order, with whether this player has collected
+// it. Used by the admin player profile, and ready for the in-game glossary.
+// ============================================================
+router.get('/:id/artifacts', verifyToken, async (req, res, next) => {
+  const { id } = req.params;
+
+  // Same access rule as /progression: admin/staff read anyone, a player reads only
+  // their own (role must be 'player' -- admin-panel ids can equal player ids).
+  const role = req.user.role;
+  const isStaff = role === 'admin' || role === 'staff';
+  const isSelf = role === 'player' && Number(req.user.id) === Number(id);
+  if (!isStaff && !isSelf) {
+    return res.status(403).json({ error: "Forbidden: cannot view another player's artifacts" });
+  }
+
+  try {
+    const [players] = await pool.query('SELECT id, name FROM players WHERE id = ?', [id]);
+    if (players.length === 0) {
+      throw new NotFoundError('Player not found');
+    }
+
+    // One AR artifact per sub-quest, so the player's row for the quest is the record:
+    // collected when artifacts_found > 0. A quest holds an artifact when
+    // artifacts_total > 0 -- the same rule GET /players and the leaderboard count with,
+    // so every "X of Y" agrees. artifact_name is null while a path is not yet set.
+    const [rows] = await pool.query(
+      `SELECT q.id AS quest_id, q.main_quest, q.sub_quest, q.chapter_start, q.chapter_end,
+              q.title AS quest_title, q.artifact_resource_path,
+              COALESCE(pq.artifacts_found, 0) > 0 AS collected
+         FROM quests q
+         LEFT JOIN player_quests pq ON pq.quest_id = q.id AND pq.player_id = ?
+        WHERE q.status = 'active' AND q.artifacts_total > 0
+        ORDER BY q.main_quest, q.sub_quest`,
+      [id]
+    );
+
+    const artifacts = rows.map(r => ({
+      quest_id: r.quest_id,
+      main_quest: r.main_quest,
+      sub_quest: r.sub_quest,
+      chapter_start: r.chapter_start,
+      chapter_end: r.chapter_end,
+      quest_title: r.quest_title,
+      artifact_name: artifactNameFromPath(r.artifact_resource_path),
+      artifact_resource_path: r.artifact_resource_path,
+      collected: Boolean(r.collected)
+    }));
+
+    res.json({
+      player_id: players[0].id,
+      player_name: players[0].name,
+      collected: artifacts.filter(a => a.collected).length,
+      total: artifacts.length,
+      artifacts
     });
   } catch (err) {
     next(err);

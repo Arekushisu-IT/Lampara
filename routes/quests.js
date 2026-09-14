@@ -7,6 +7,7 @@ const verifyToken = require('../src/middleware/auth');
 const authorize = require('../src/middleware/authorize');
 const { NotFoundError, ValidationError } = require('../src/utils/errors');
 const { validateQuestCreate, validateQuestUpdate, validate } = require('../src/middleware/validation');
+const { artifactNameFromPath } = require('../src/utils/artifacts');
 const { buildOptionDeltas } = require('../src/utils/dialogues');
 const { normalizeImportedDialogues } = require('../src/utils/dialogueImport');
 
@@ -25,6 +26,9 @@ router.get('/', verifyToken, authorize('admin', 'staff'), async (req, res, next)
          WHERE p.current_quest_id = q.main_quest AND p.current_sub_quest = q.sub_quest) as player_count
        FROM quests q ORDER BY q.main_quest, q.sub_quest`
     );
+
+    // Readable name for each sub-quest's artifact, derived from the prefab path.
+    quests.forEach(q => { q.artifact_name = artifactNameFromPath(q.artifact_resource_path); });
 
     res.json({
       count: quests.length,

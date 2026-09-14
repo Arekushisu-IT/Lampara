@@ -4,6 +4,7 @@ const verifyToken = require('../src/middleware/auth');
 const authorize = require('../src/middleware/authorize');
 const { NotFoundError } = require('../src/utils/errors');
 const { buildOptionDeltas } = require('../src/utils/dialogues');
+const { artifactNameFromPath } = require('../src/utils/artifacts');
 
 const router = express.Router();
 
@@ -53,6 +54,7 @@ router.get('/quest-content/:chapter/:quest/:subquest', verifyToken, async (req, 
         title: questData.title,
         description: questData.description,
         artifact_resource_path: questData.artifact_resource_path,
+        artifact_name: artifactNameFromPath(questData.artifact_resource_path),
         status: questData.status
       },
       dialogues,

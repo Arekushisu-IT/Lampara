@@ -39,6 +39,8 @@ function buildRanking(playerRow, index) {
     suspicionScore:   playerRow.suspicion || 0,
     codexCompletion:  Math.min(100, playerRow.codexCompletion || 0),
     questsCompleted: playerRow.questsCompleted || 0,
+    artifactsCollected: playerRow.artifactsCollected || 0,   // FR5: artifacts collected
+    artifactsTotal:     playerRow.artifactsTotal || 0,       // ...out of this many
     isActive:        playerRow.isActive === 1,
     createdAt:       playerRow.created_at,
     updatedAt:       playerRow.updated_at,
@@ -70,6 +72,8 @@ const BASE_SELECT = `
   ) as questProgress,
   COALESCE(pq.quests_completed, 0) as questsCompleted,
   COALESCE(pq.total_failures, 0)    as totalFailures,
+  COALESCE(pq.artifacts_collected, 0) as artifactsCollected,
+  (SELECT COUNT(*) FROM quests aq WHERE aq.status = 'active' AND aq.artifacts_total > 0) as artifactsTotal,
   -- FR5 artifact completion, aggregated across every ACTIVE quest. Reads 0 while
   -- quests.artifacts_total is unpopulated (most quests are still 0), so this only
   -- becomes meaningful once real per-quest artifact counts are entered.
@@ -85,12 +89,17 @@ FROM players p
 LEFT JOIN (
   -- The status filter moved into the COUNT so failures recorded on in-progress and
   -- failed rows are still summed; leaving it in the WHERE would drop them silently.
-  SELECT player_id,
-         COUNT(CASE WHEN status = 'completed' THEN 1 END) as quests_completed,
-         SUM(failure_count)                               as total_failures,
-         SUM(artifacts_found)                             as total_artifacts
-  FROM player_quests
-  GROUP BY player_id
+  -- Artifacts are capped at what each quest holds (LEAST), since more than one game
+  -- script can record the same artifact; collected counts quests whose artifact was found.
+  SELECT pqx.player_id,
+         COUNT(CASE WHEN pqx.status = 'completed' THEN 1 END)          as quests_completed,
+         SUM(pqx.failure_count)                                        as total_failures,
+         SUM(LEAST(pqx.artifacts_found, qx.artifacts_total))           as total_artifacts,
+         COUNT(CASE WHEN pqx.artifacts_found > 0 AND qx.artifacts_total > 0
+                     AND qx.status = 'active' THEN 1 END)              as artifacts_collected
+  FROM player_quests pqx
+  JOIN quests qx ON qx.id = pqx.quest_id
+  GROUP BY pqx.player_id
 ) pq ON p.id = pq.player_id
 `;
 
@@ -200,6 +209,8 @@ router.get('/top/:count', verifyToken, async (req, res, next) => {
         p.suspicion,
         p.status,
         COALESCE(pq.total_failures, 0) as totalFailures,
+        (SELECT COUNT(*) FROM player_quests apq JOIN quests aq ON aq.id = apq.quest_id WHERE apq.player_id = p.id AND apq.artifacts_found > 0 AND aq.artifacts_total > 0 AND aq.status = 'active') as artifactsCollected,
+        (SELECT COUNT(*) FROM quests aq WHERE aq.status = 'active' AND aq.artifacts_total > 0) as artifactsTotal,
         ROUND(p.current_quest_id * 50 + p.current_sub_quest * 7, 0) as questProgress
       FROM players p
       LEFT JOIN (
@@ -231,6 +242,8 @@ router.get('/top/:count', verifyToken, async (req, res, next) => {
       bookChapterEnd:   p.bookChapterEnd,
       failCount:       p.totalFailures || 0,
       suspicion:       p.suspicion || 0,
+      artifactsCollected: p.artifactsCollected || 0,
+      artifactsTotal:     p.artifactsTotal || 0,
       // Aliases the Unity LeaderboardEntry reads -- see buildRanking above.
       currentMainQuest: p.current_quest_id,
       suspicionScore:   p.suspicion || 0,
