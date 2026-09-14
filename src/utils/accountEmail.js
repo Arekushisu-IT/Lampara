@@ -48,15 +48,55 @@ const NORMALIZED_EMAIL_SQL = `
   END`;
 
 /**
- * True when any player already uses this address (normalized). Pass excludePlayerId
- * when changing an existing player's email, so their own row does not count.
+ * An expired sign-up: registered but never verified ('inactive' is the pending status),
+ * and the 24-hour verification link has run out. Nobody proved they own the inbox, so
+ * the row must not hold the email or username -- otherwise a fake or mistyped address,
+ * or someone else's real Gmail, would be blocked forever.
+ */
+const EXPIRED_SIGNUP_SQL = `(status = 'inactive' AND token_expires_at IS NOT NULL AND token_expires_at < NOW())`;
+
+/**
+ * True when any player already uses this address (normalized). Expired sign-ups do not
+ * count. Pass excludePlayerId when changing an existing player's email, so their own row
+ * does not count.
  */
 async function emailHasAccount(pool, email, excludePlayerId = null) {
   const [rows] = await pool.query(
-    `SELECT id FROM players WHERE ${NORMALIZED_EMAIL_SQL} = ? AND (? IS NULL OR id <> ?) LIMIT 1`,
+    `SELECT id FROM players
+      WHERE ${NORMALIZED_EMAIL_SQL} = ? AND NOT ${EXPIRED_SIGNUP_SQL} AND (? IS NULL OR id <> ?)
+      LIMIT 1`,
     [normalizeAccountEmail(email), excludePlayerId, excludePlayerId]
   );
   return rows.length > 0;
 }
 
-module.exports = { normalizeAccountEmail, isMultiAccountEmail, emailHasAccount };
+/** True when a live (not expired sign-up) account has this username. */
+async function usernameTaken(pool, username) {
+  const [rows] = await pool.query(
+    `SELECT id FROM players WHERE username = ? AND NOT ${EXPIRED_SIGNUP_SQL} LIMIT 1`,
+    [username]
+  );
+  return rows.length > 0;
+}
+
+/**
+ * Deletes expired sign-ups holding this username or email, so a new registration can use
+ * them. Only rows that never started playing (no player_quests) are removed. For
+ * MULTI_ACCOUNT_EMAILS addresses only the username is matched, so one registration does
+ * not sweep away other test sign-ups. Returns the number of rows removed.
+ */
+async function releaseExpiredSignups(pool, { username, email }) {
+  const matchEmail = email && !isMultiAccountEmail(email);
+  const [result] = await pool.query(
+    `DELETE FROM players
+      WHERE ${EXPIRED_SIGNUP_SQL}
+        AND (username = ? ${matchEmail ? `OR ${NORMALIZED_EMAIL_SQL} = ?` : ''})
+        AND NOT EXISTS (SELECT 1 FROM player_quests pq WHERE pq.player_id = players.id)`,
+    matchEmail ? [username, normalizeAccountEmail(email)] : [username]
+  );
+  return result.affectedRows;
+}
+
+module.exports = {
+  normalizeAccountEmail, isMultiAccountEmail, emailHasAccount, usernameTaken, releaseExpiredSignups
+};

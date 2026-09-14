@@ -199,6 +199,13 @@ Indexes: `uq_username` (unique), `idx_username`, `idx_status`, `idx_level`,
 > already has an account, and `PUT /players/:id` returns 409 when an email is *changed* to one
 > another player uses (resending a player's current email is allowed).
 
+> **Unverified sign-ups expire.** Registration saves the player as `status = 'inactive'` until they
+> click the emailed link (`verify_token`, valid 24 hours until `token_expires_at`). Once that link has
+> expired unverified, the row no longer holds its email or username: availability checks ignore it,
+> and the next registration using that username or email deletes it (only if it has no
+> `player_quests` rows). `POST /auth/check-email` gives the register page a live "already used" hint.
+> The web player portal refuses `inactive` accounts; the game shows its own waiting screen.
+
 > **Online status is computed, not read from `is_online` alone.** `is_online` is set at login and
 > cleared only by an explicit logout, so closing the app left players "online". Any authenticated
 > player request refreshes `last_seen_at` (at most once a minute, `src/middleware/auth.js`), and the

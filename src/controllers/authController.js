@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const { isMultiAccountEmail, emailHasAccount } = require('../utils/accountEmail');
+const { isMultiAccountEmail, emailHasAccount, usernameTaken, releaseExpiredSignups } = require('../utils/accountEmail');
 const fs = require('fs');
 const path = require('path');
 
@@ -310,11 +310,13 @@ const playerRegister = async (req, res, next) => {
       return res.status(400).json({ error: 'Name, Username, Password, Email, and Birthdate are required' });
     }
 
+    // A sign-up whose verification link expired unverified does not keep its username
+    // or email: remove it so this registration can use them.
+    const released = await releaseExpiredSignups(pool, { username, email });
+    if (released > 0) console.log(`[register] Released ${released} expired unverified sign-up(s)`);
+
     // Check if username is taken
-    const [existing] = await pool.query(
-      'SELECT id FROM players WHERE username = ?', [username]
-    );
-    if (existing.length > 0) {
+    if (await usernameTaken(pool, username)) {
       return res.status(400).json({ error: 'Username is already registered.' });
     }
 
@@ -407,13 +409,34 @@ const checkUsername = async (req, res, next) => {
     const { username } = req.body;
     if (!username) return res.status(400).json({ error: 'Username is required' });
 
-    const [existing] = await pool.query('SELECT id FROM players WHERE username = ?', [username]);
-
-    if (existing.length > 0) {
+    if (await usernameTaken(pool, username)) {
       return res.json({ available: false, message: 'Username is already taken' });
     }
 
     return res.json({ available: true, message: 'Username is available' });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ==========================================
+// CHECK IF EMAIL ALREADY HAS AN ACCOUNT
+// Same rule as registration: normalized Gmail addresses, MULTI_ACCOUNT_EMAILS exempt,
+// expired unverified sign-ups ignored.
+// ==========================================
+const checkEmail = async (req, res, next) => {
+  try {
+    const email = typeof req.body.email === 'string' ? req.body.email.trim() : '';
+    if (!email) return res.status(400).json({ error: 'Email is required' });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.json({ available: false, message: 'Enter a valid email address' });
+    }
+
+    if (!isMultiAccountEmail(email) && await emailHasAccount(pool, email)) {
+      return res.json({ available: false, message: 'Email is already used by another account' });
+    }
+
+    return res.json({ available: true, message: 'Email is available' });
   } catch (err) {
     next(err);
   }
@@ -666,4 +689,4 @@ const resetPassword = async (req, res, next) => {
 // ==========================================
 // EXPORT ALL FUNCTIONS
 // ==========================================
-module.exports = { adminLogin, playerLogin, playerLogout, getMe, adminRegister, playerRegister, checkUsername, verifyPlayer, checkStatus, checkVerification, forgotPassword, resetPassword };
+module.exports = { adminLogin, playerLogin, playerLogout, getMe, adminRegister, playerRegister, checkUsername, checkEmail, verifyPlayer, checkStatus, checkVerification, forgotPassword, resetPassword };
