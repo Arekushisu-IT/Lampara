@@ -436,23 +436,28 @@ router.delete('/dialogues/:dialogueId', verifyToken, authorize('admin'), async (
 router.get('/quest-stats', verifyToken, authorize('admin', 'staff'), async (req, res, next) => {
   try {
     const [stats] = await pool.query(`
+      -- Difficulty is measured in game-overs (player_quests.failure_count, FR6).
+      -- "failed" used to count every non-completed row, so a player still mid-quest
+      -- showed as a failure; statuses are now reported as they are stored.
       SELECT
         q.id as quest_id,
-        CONCAT('Ch.', q.chapter, ' MQ', q.main_quest, ' SQ', q.sub_quest) as quest_label,
+        q.main_quest,
+        q.sub_quest,
+        q.chapter_start,
+        q.chapter_end,
+        CONCAT('MQ', q.main_quest, ' SQ', q.sub_quest) as quest_label,
         q.title,
         COUNT(pq.id) as attempts,
-        COALESCE(SUM(CASE WHEN pq.status = 'completed' THEN 1 ELSE 0 END), 0) as completed,
-        COALESCE(SUM(CASE WHEN pq.status != 'completed' THEN 1 ELSE 0 END), 0) as failed,
-        ROUND(
-          (COUNT(pq.id) - COALESCE(SUM(CASE WHEN pq.status = 'completed' THEN 1 ELSE 0 END), 0)) * 100.0
-          / NULLIF(COUNT(pq.id), 0), 1
-        ) as fail_rate
+        COALESCE(SUM(pq.status = 'completed'), 0)   as completed,
+        COALESCE(SUM(pq.status = 'in_progress'), 0) as in_progress,
+        COALESCE(SUM(pq.status = 'failed'), 0)      as failed,
+        COALESCE(SUM(pq.failure_count), 0)          as game_overs
       FROM quests q
       LEFT JOIN player_quests pq ON pq.quest_id = q.id
       WHERE q.status = 'active'
-      GROUP BY q.id, q.chapter, q.main_quest, q.sub_quest, q.title
+      GROUP BY q.id, q.main_quest, q.sub_quest, q.chapter_start, q.chapter_end, q.title
       HAVING attempts > 0
-      ORDER BY fail_rate DESC, attempts DESC
+      ORDER BY game_overs DESC, attempts DESC
     `);
 
     res.json({ count: stats.length, stats });
