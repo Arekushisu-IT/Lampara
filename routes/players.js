@@ -17,6 +17,8 @@ router.get('/', verifyToken, authorize('admin', 'staff'), async (req, res, next)
       `SELECT p.id, p.name, p.username, p.email, p.birthdate, p.level, p.experience,
               p.status, p.is_online, p.chapter, p.suspicion, p.current_quest_id,
               p.current_sub_quest, p.created_at,
+              (SELECT cq.chapter_start FROM quests cq WHERE cq.main_quest = p.current_quest_id AND cq.sub_quest = p.current_sub_quest) as book_chapter_start,
+              (SELECT cq.chapter_end FROM quests cq WHERE cq.main_quest = p.current_quest_id AND cq.sub_quest = p.current_sub_quest) as book_chapter_end,
               COALESCE(ROUND((SELECT COUNT(*) FROM player_quests pq WHERE pq.player_id = p.id AND pq.status = 'completed') * 100.0 / NULLIF((SELECT COUNT(*) FROM quests WHERE status = 'active'), 0), 0), 0) as overall_progress
        FROM players p ORDER BY p.created_at DESC`
     );
@@ -522,13 +524,27 @@ router.post('/:id/save-checkpoint', verifyToken, async (req, res, next) => {
 // ============================================================
 // GET: PLAYER PROGRESSION (Detailed quest completion breakdown)
 // ============================================================
-router.get('/:id/progression', verifyToken, authorize('admin', 'staff'), async (req, res, next) => {
+router.get('/:id/progression', verifyToken, async (req, res, next) => {
   const { id } = req.params;
+
+  // Admin/staff may read anyone; a player may read only their own. The player portal
+  // calls this with a player token, and the previous admin/staff-only guard returned
+  // 403 to every player. role === 'player' is required for the self check because
+  // admin-panel accounts have their own numeric ids that could equal a player id.
+  const role = req.user.role;
+  const isStaff = role === 'admin' || role === 'staff';
+  const isSelf = role === 'player' && Number(req.user.id) === Number(id);
+  if (!isStaff && !isSelf) {
+    return res.status(403).json({ error: "Forbidden: cannot view another player's progression" });
+  }
 
   try {
     // 1. Fetch the player's basic info
     const [players] = await pool.query(
-      'SELECT id, name, username, chapter, current_quest_id, current_sub_quest, suspicion FROM players WHERE id = ?',
+      `SELECT p.id, p.name, p.username, p.chapter, p.current_quest_id, p.current_sub_quest, p.suspicion,
+              (SELECT cq.chapter_start FROM quests cq WHERE cq.main_quest = p.current_quest_id AND cq.sub_quest = p.current_sub_quest) as book_chapter_start,
+              (SELECT cq.chapter_end FROM quests cq WHERE cq.main_quest = p.current_quest_id AND cq.sub_quest = p.current_sub_quest) as book_chapter_end
+         FROM players p WHERE p.id = ?`,
       [id]
     );
 
@@ -538,21 +554,23 @@ router.get('/:id/progression', verifyToken, authorize('admin', 'staff'), async (
 
     const player = players[0];
 
-    // 2. Fetch all quests grouped by chapter
+    // 2. Fetch all quests, grouped below by main quest
     const [allQuests] = await pool.query(
-      `SELECT q.id, q.chapter, q.main_quest, q.sub_quest, q.title, q.status,
+      `SELECT q.id, q.main_quest, q.sub_quest, q.chapter_start, q.chapter_end, q.title, q.status,
        q.artifacts_total,
        pq.status as player_status, pq.progress_percent, pq.completed_at,
        pq.failure_count, pq.artifacts_found
        FROM quests q
        LEFT JOIN player_quests pq ON pq.quest_id = q.id AND pq.player_id = ?
        WHERE q.status = 'active'
-       ORDER BY q.chapter, q.main_quest, q.sub_quest`,
+       ORDER BY q.main_quest, q.sub_quest`,
       [id]
     );
 
-    // 3. Build structured progression
-    const chaptersMap = {};
+    // 3. Build structured progression, one entry per main quest. (Grouping by
+    //    quests.chapter produced a single "Chapter 1" bucket -- that column is legacy
+    //    and always 1. Book chapters come from chapter_start / chapter_end.)
+    const mainQuestMap = {};
     let totalSubQuests = 0;
     let completedSubQuests = 0;
     let totalFailures = 0;
@@ -560,15 +578,8 @@ router.get('/:id/progression', verifyToken, authorize('admin', 'staff'), async (
     let totalArtifactsAvailable = 0;
 
     allQuests.forEach(q => {
-      if (!chaptersMap[q.chapter]) {
-        chaptersMap[q.chapter] = { chapter: q.chapter, quests: {} };
-      }
-
-      if (!chaptersMap[q.chapter].quests[q.main_quest]) {
-        chaptersMap[q.chapter].quests[q.main_quest] = {
-          quest: q.main_quest,
-          sub_quests: []
-        };
+      if (!mainQuestMap[q.main_quest]) {
+        mainQuestMap[q.main_quest] = { main_quest: q.main_quest, sub_quests: [] };
       }
 
       totalSubQuests++;
@@ -583,10 +594,12 @@ router.get('/:id/progression', verifyToken, authorize('admin', 'staff'), async (
       totalArtifactsFound += artifactsFound;
       totalArtifactsAvailable += artifactsTotal;
 
-      chaptersMap[q.chapter].quests[q.main_quest].sub_quests.push({
+      mainQuestMap[q.main_quest].sub_quests.push({
         sub_quest: q.sub_quest,
         quest_id: q.id,
         title: q.title,
+        chapter_start: q.chapter_start,
+        chapter_end: q.chapter_end,
         status: isCompleted ? 'completed' : (q.player_status || 'not_started'),
         progress_percent: q.progress_percent || 0,
         failure_count: failureCount,
@@ -596,22 +609,20 @@ router.get('/:id/progression', verifyToken, authorize('admin', 'staff'), async (
       });
     });
 
-    // Convert to arrays and add completion percentages
-    const chapters = Object.values(chaptersMap).map(ch => {
-      const questsArray = Object.values(ch.quests).map(mq => {
-        const completed = mq.sub_quests.filter(sq => sq.status === 'completed').length;
-        const total = mq.sub_quests.length;
-        return {
-          ...mq,
-          completion: total > 0 ? Math.round((completed / total) * 100) : 0,
-          completed_count: completed,
-          total_count: total
-        };
-      });
-
+    // Summarise each main quest: completion, plus the book-chapter span it covers
+    // (the lowest chapter_start to the highest chapter_end of its sub-quests).
+    const mainQuests = Object.values(mainQuestMap).map(mq => {
+      const completed = mq.sub_quests.filter(sq => sq.status === 'completed').length;
+      const total = mq.sub_quests.length;
+      const starts = mq.sub_quests.map(sq => sq.chapter_start).filter(v => v != null);
+      const ends = mq.sub_quests.map(sq => sq.chapter_end).filter(v => v != null);
       return {
-        chapter: ch.chapter,
-        quests: questsArray
+        ...mq,
+        chapter_start: starts.length ? Math.min(...starts) : null,
+        chapter_end: ends.length ? Math.max(...ends) : null,
+        completion: total > 0 ? Math.round((completed / total) * 100) : 0,
+        completed_count: completed,
+        total_count: total
       };
     });
 
@@ -630,6 +641,8 @@ router.get('/:id/progression', verifyToken, authorize('admin', 'staff'), async (
       player_id: player.id,
       player_name: player.name,
       current_chapter: player.chapter,
+      current_book_chapter_start: player.book_chapter_start,
+      current_book_chapter_end: player.book_chapter_end,
       current_quest: player.current_quest_id,
       current_sub_quest: player.current_sub_quest,
       codex,
@@ -640,7 +653,7 @@ router.get('/:id/progression', verifyToken, authorize('admin', 'staff'), async (
       artifacts_found: totalArtifactsFound,
       artifacts_total: totalArtifactsAvailable,
       artifact_completion_rate: artifactCompletionRate,
-      chapters
+      main_quests: mainQuests
     });
   } catch (err) {
     next(err);

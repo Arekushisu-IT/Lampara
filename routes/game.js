@@ -21,7 +21,7 @@ router.get('/quest-content/:chapter/:quest/:subquest', verifyToken, async (req, 
   try {
     // 1. Find the quest record
     const [quests] = await pool.query(
-      'SELECT id, chapter, main_quest, sub_quest, title, description, artifact_resource_path, status FROM quests WHERE main_quest = ? AND sub_quest = ?',
+      'SELECT id, chapter, chapter_start, chapter_end, main_quest, sub_quest, title, description, artifact_resource_path, status FROM quests WHERE main_quest = ? AND sub_quest = ?',
       [quest, subquest]
     );
 
@@ -46,6 +46,8 @@ router.get('/quest-content/:chapter/:quest/:subquest', verifyToken, async (req, 
       quest: {
         id: questData.id,
         chapter: questData.chapter,
+        chapter_start: questData.chapter_start,
+        chapter_end: questData.chapter_end,
         quest: questData.main_quest,
         sub_quest: questData.sub_quest,
         title: questData.title,
@@ -184,7 +186,8 @@ router.get('/quest-list/:chapter', verifyToken, async (req, res, next) => {
 
   try {
     const [quests] = await pool.query(
-      `SELECT q.id, q.chapter, q.main_quest, q.sub_quest, q.title, q.description, q.artifact_resource_path, q.status,
+      `SELECT q.id, q.chapter, q.chapter_start, q.chapter_end, q.main_quest, q.sub_quest, q.title, q.description,
+              q.artifact_resource_path, q.status,
        (SELECT COUNT(*) FROM quest_dialogues qd WHERE qd.quest_id = q.id) as dialogue_count
        FROM quests q
        WHERE q.status = 'active'

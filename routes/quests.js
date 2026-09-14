@@ -16,9 +16,14 @@ const router = express.Router();
 router.get('/', verifyToken, authorize('admin', 'staff'), async (req, res, next) => {
   try {
     const [quests] = await pool.query(
-      `SELECT q.id, q.chapter, q.main_quest, q.sub_quest, q.title, q.description, q.artifact_resource_path, q.artifacts_total, q.status,
-       (SELECT COUNT(*) FROM players p WHERE p.current_quest_id = q.id) as player_count
-       FROM quests q ORDER BY q.chapter, q.main_quest, q.sub_quest`
+      `SELECT q.id, q.chapter, q.chapter_start, q.chapter_end, q.main_quest, q.sub_quest, q.title, q.description,
+              q.artifact_resource_path, q.artifacts_total, q.status,
+       -- players.current_quest_id holds the MAIN QUEST NUMBER, so match on the
+       -- player's (main quest, sub quest) position. Comparing it to q.id counted the
+       -- wrong players for every quest past the first row of each main quest.
+       (SELECT COUNT(*) FROM players p
+         WHERE p.current_quest_id = q.main_quest AND p.current_sub_quest = q.sub_quest) as player_count
+       FROM quests q ORDER BY q.main_quest, q.sub_quest`
     );
 
     res.json({
@@ -125,7 +130,7 @@ router.post('/', verifyToken, authorize('admin', 'staff'), validateQuestCreate, 
 // Update quest (with validation)
 router.put('/:id(\\d+)', verifyToken, authorize('admin', 'staff'), validateQuestUpdate, validate, async (req, res, next) => {
   const { id } = req.params;
-  const { chapter, title, description, artifact_resource_path, artifacts_total, status } = req.body;
+  const { chapter, chapter_start, chapter_end, title, description, artifact_resource_path, artifacts_total, status } = req.body;
 
   try {
     let updateQuery = 'UPDATE quests SET ';
@@ -159,6 +164,28 @@ router.put('/:id(\\d+)', verifyToken, authorize('admin', 'staff'), validateQuest
     if (status !== undefined) {
       updates.push('status = ?');
       values.push(status);
+    }
+    // El Filibusterismo book-chapter range. Either end may be sent alone, so the
+    // start <= end rule is checked against the stored value of the other end.
+    if (chapter_start !== undefined || chapter_end !== undefined) {
+      const [current] = await pool.query(
+        'SELECT chapter_start, chapter_end FROM quests WHERE id = ?', [id]);
+      if (current.length === 0) {
+        throw new NotFoundError('Quest not found');
+      }
+      const start = chapter_start !== undefined ? chapter_start : current[0].chapter_start;
+      const end = chapter_end !== undefined ? chapter_end : current[0].chapter_end;
+      if (start != null && end != null && start > end) {
+        throw new ValidationError('chapter_start must not be greater than chapter_end');
+      }
+      if (chapter_start !== undefined) {
+        updates.push('chapter_start = ?');
+        values.push(chapter_start);
+      }
+      if (chapter_end !== undefined) {
+        updates.push('chapter_end = ?');
+        values.push(chapter_end);
+      }
     }
 
     if (updates.length === 0) {

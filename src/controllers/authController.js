@@ -35,17 +35,19 @@ function normalizeEmail(value) {
  * not being applied yet) returns zeros rather than breaking the login path.
  */
 async function getCurrentQuestMetrics(player) {
-  const fallback = { failure_count: 0, artifacts_found: 0 };
+  const fallback = { failure_count: 0, artifacts_found: 0, book_chapter_start: null, book_chapter_end: null };
 
   if (!player || !player.current_quest_id || !player.current_sub_quest) {
     return fallback;
   }
 
   try {
+    // LEFT JOIN: the quest's book-chapter range is returned even when the player has
+    // no player_quests row for it yet.
     const [rows] = await pool.query(
-      `SELECT pq.failure_count, pq.artifacts_found
+      `SELECT q.chapter_start, q.chapter_end, pq.failure_count, pq.artifacts_found
          FROM quests q
-         JOIN player_quests pq ON pq.quest_id = q.id AND pq.player_id = ?
+         LEFT JOIN player_quests pq ON pq.quest_id = q.id AND pq.player_id = ?
         WHERE q.main_quest = ? AND q.sub_quest = ?
         LIMIT 1`,
       [player.id, player.current_quest_id, player.current_sub_quest]
@@ -55,7 +57,9 @@ async function getCurrentQuestMetrics(player) {
 
     return {
       failure_count: rows[0].failure_count || 0,
-      artifacts_found: rows[0].artifacts_found || 0
+      artifacts_found: rows[0].artifacts_found || 0,
+      book_chapter_start: rows[0].chapter_start,
+      book_chapter_end: rows[0].chapter_end
     };
   } catch (err) {
     console.warn('[auth] Could not load quest metrics (run migrations/quest_metrics.sql):', err.message);
@@ -198,7 +202,9 @@ const playerLogin = async (req, res, next) => {
         suspicion: player.suspicion,
         suspicion_seq: player.suspicion_seq,
         failure_count: metrics.failure_count,
-        artifacts_found: metrics.artifacts_found
+        artifacts_found: metrics.artifacts_found,
+        book_chapter_start: metrics.book_chapter_start,
+        book_chapter_end: metrics.book_chapter_end
       }
     });
   } catch (err) {
@@ -249,7 +255,9 @@ const getMe = async (req, res, next) => {
           suspicion: player.suspicion,
           suspicion_seq: player.suspicion_seq,
           failure_count: metrics.failure_count,
-          artifacts_found: metrics.artifacts_found
+          artifacts_found: metrics.artifacts_found,
+          book_chapter_start: metrics.book_chapter_start,
+          book_chapter_end: metrics.book_chapter_end
         }
       });
     } else {

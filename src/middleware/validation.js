@@ -201,6 +201,17 @@ const validateQuestUpdate = [
     .isInt({ min: 1, max: 13 }).withMessage('Chapter must be between 1 and 13.')
     .toInt(),
 
+  // El Filibusterismo has 39 chapters. null clears the value.
+  body('chapter_start')
+    .optional({ nullable: true })
+    .isInt({ min: 1, max: 39 }).withMessage('chapter_start must be between 1 and 39.')
+    .toInt(),
+
+  body('chapter_end')
+    .optional({ nullable: true })
+    .isInt({ min: 1, max: 39 }).withMessage('chapter_end must be between 1 and 39.')
+    .toInt(),
+
   body('title')
     .optional()
     .trim()

@@ -25,7 +25,9 @@ function buildRanking(playerRow, index) {
     questProgress:   Math.min(100, playerRow.questProgress || 0),
     currentQuest:    playerRow.current_quest_id,
     currentSubQuest: playerRow.current_sub_quest,
-    chapter:         playerRow.chapter,
+    chapter:         playerRow.chapter,                 // main-quest number (legacy name)
+    bookChapterStart: playerRow.bookChapterStart,       // El Filibusterismo chapters the
+    bookChapterEnd:   playerRow.bookChapterEnd,         // player's current sub-quest covers
     failCount:       playerRow.totalFailures || 0,  // FR6: game-overs, from player_quests
     suspicion:       playerRow.suspicion || 0,      // current meter, not a fail count
 
@@ -49,6 +51,8 @@ const BASE_SELECT = `
   p.name             as playerName,
   p.email            as email,
   p.chapter          as chapter,
+  (SELECT cq.chapter_start FROM quests cq WHERE cq.main_quest = p.current_quest_id AND cq.sub_quest = p.current_sub_quest) as bookChapterStart,
+  (SELECT cq.chapter_end FROM quests cq WHERE cq.main_quest = p.current_quest_id AND cq.sub_quest = p.current_sub_quest) as bookChapterEnd,
   p.current_quest_id,
   p.current_sub_quest,
   p.suspicion,
@@ -67,8 +71,8 @@ const BASE_SELECT = `
   COALESCE(pq.quests_completed, 0) as questsCompleted,
   COALESCE(pq.total_failures, 0)    as totalFailures,
   -- FR5 artifact completion, aggregated across every ACTIVE quest. Reads 0 while
-  -- quests.artifacts_total is unpopulated (19 of 22 active quests are still 0), so
-  -- this only becomes meaningful once real per-quest artifact counts are entered.
+  -- quests.artifacts_total is unpopulated (most quests are still 0), so this only
+  -- becomes meaningful once real per-quest artifact counts are entered.
   ROUND(
     COALESCE(pq.total_artifacts, 0) * 100.0 /
     GREATEST((SELECT COALESCE(SUM(artifacts_total), 0) FROM quests WHERE status = 'active'), 1),
@@ -189,6 +193,8 @@ router.get('/top/:count', verifyToken, async (req, res, next) => {
         p.name            as playerName,
         p.email           as email,
         p.chapter         as chapter,
+        (SELECT cq.chapter_start FROM quests cq WHERE cq.main_quest = p.current_quest_id AND cq.sub_quest = p.current_sub_quest) as bookChapterStart,
+        (SELECT cq.chapter_end FROM quests cq WHERE cq.main_quest = p.current_quest_id AND cq.sub_quest = p.current_sub_quest) as bookChapterEnd,
         p.current_quest_id,
         p.current_sub_quest,
         p.suspicion,
@@ -221,6 +227,8 @@ router.get('/top/:count', verifyToken, async (req, res, next) => {
       currentQuest:    p.current_quest_id,
       currentSubQuest: p.current_sub_quest,
       chapter:         p.chapter,
+      bookChapterStart: p.bookChapterStart,
+      bookChapterEnd:   p.bookChapterEnd,
       failCount:       p.totalFailures || 0,
       suspicion:       p.suspicion || 0,
       // Aliases the Unity LeaderboardEntry reads -- see buildRanking above.
