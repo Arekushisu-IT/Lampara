@@ -28,3 +28,6 @@ logs/
 # Temporary files
 tmp/
 temp/
+
+# Local restore points written by migration runners -- never commit
+migrations/backups/

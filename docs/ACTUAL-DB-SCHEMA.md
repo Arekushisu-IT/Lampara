@@ -1,6 +1,6 @@
 # Lampara — Actual Database Schema
 
-**Last captured:** 2026-09-12
+**Last captured:** 2026-09-12 · `quests` / `player_quests` re-verified 2026-09-14 after `migrations/quest_chapters.sql`
 **Source:** Railway MySQL (`shortline.proxy.rlwy.net:20695`), database `lampara_database`
 **Captured from:** `INFORMATION_SCHEMA` — column types, keys, defaults and indexes are verbatim.
 
@@ -14,12 +14,12 @@
 | [`game_config`](#game_config) | 6 | Suspicion meter tuning |
 | [`notifications`](#notifications) | 6 | Player notifications |
 | [`password_resets`](#password_resets) | 3 | Password reset tokens |
-| [`player_quests`](#player_quests) | 96 | Per-player quest progress + FR5/FR6 metrics |
+| [`player_quests`](#player_quests) | 92 | Per-player quest progress + FR5/FR6 metrics |
 | [`players`](#players) | 107 | Game accounts |
 | [`post_comments`](#post_comments) | 1 | Comments on posts |
 | [`post_likes`](#post_likes) | 5 | Likes on posts |
 | [`quest_dialogues`](#quest_dialogues) | 239 | NPC dialogue + A/B/C choices |
-| [`quests`](#quests) | 35 | Quest definitions (7 × 5 grid) |
+| [`quests`](#quests) | 20 | The 20 designed sub-quests, with El Filibusterismo chapter ranges |
 
 ---
 
@@ -179,7 +179,13 @@ Indexes: `uq_username` (unique), `idx_username`, `idx_status`, `idx_level`,
 > ⚠️ **`current_quest_id` is a misnomer.** It stores the player's **main quest number
 > (1–7)**, *not* a foreign key into `quests.id`. `authController.js` maps it to
 > `current_main_quest` in API responses. To resolve the player's actual quest row, look
-> up `(chapter, main_quest, sub_quest)` — see the note under [`quests`](#quests).
+> up `quests` by `(main_quest, sub_quest)` = `(current_quest_id, current_sub_quest)` — see
+> the note under [`quests`](#quests).
+
+> ⚠️ **`players.chapter` is also the main-quest number, not a book chapter.** The game sends
+> the main-quest number as `advance_to_chapter`, so this column mirrors `current_quest_id`.
+> It is **never** used to look up a quest. The El Filibusterismo book chapters a player is
+> on come from their current quest's `quests.chapter_start` / `chapter_end`.
 
 **The two suspicion columns, and why there are two:**
 
@@ -264,6 +270,8 @@ Populated by the `lampara-dialogue-import` pipeline (`seeds/`).
 |---|---|---|---|---|
 | `id` | int | NO | PK, AI | |
 | `chapter` | int | NO | idx | |
+| `chapter_start` | int | YES | | NULL |
+| `chapter_end` | int | YES | | NULL |
 | `main_quest` | int | NO | | 1 |
 | `sub_quest` | int | NO | | 1 |
 | `title` | varchar(255) | NO | | |
@@ -274,36 +282,43 @@ Populated by the `lampara-dialogue-import` pipeline (`seeds/`).
 | `created_at` | timestamp | YES | | CURRENT_TIMESTAMP |
 | `updated_at` | timestamp | YES | | CURRENT_TIMESTAMP on update |
 
-Indexes: **`uq_chapter_mq_sq` (chapter, main_quest, sub_quest) UNIQUE**, `idx_chapter`, `idx_status`
+Indexes: **`uq_mq_sq` (main_quest, sub_quest) UNIQUE** — the lookup key,
+`uq_chapter_mq_sq` (chapter, main_quest, sub_quest) UNIQUE (legacy), `idx_chapter`, `idx_status`
 
 - `artifacts_total` — **FR5**: denominator of `R = (artifacts_found / artifacts_total) × 100`.
-- `status = 'standby'` marks unused placeholder rows (15 of the 35). All 20 real
-  sub-quests are `active`. `GET /players/:id/progression` filters on `status = 'active'`.
+- `chapter_start` / `chapter_end` — the **El Filibusterismo book chapters** the sub-quest
+  covers (e.g. MQ2-SQ4 = Ch. 15–16). Set for all 20 rows by `migrations/quest_chapters.sql`.
+- `chapter` — **legacy, always `1`. Not a lookup key and not a book chapter.** Kept because
+  installed APKs still send a value in that URL slot.
+- All 20 rows are `status = 'active'`. The 13 `Standby` placeholders and the undesigned
+  5th sub-quest of MQ1 and MQ2 (ids 5 and 10) were deleted 2026-09-14.
 
-### ⚠️ The 7 × 5 grid — read before writing quest IDs
+### ⚠️ Quest IDs — read before writing or looking up a quest
 
-All 35 rows are `chapter = 1`. The table is a fixed grid: **every main quest occupies 5
-slots** whether it uses them or not, with `Standby` rows filling the gaps.
+**Look quests up by `(main_quest, sub_quest)`, never by `chapter`.** Every row stores
+`chapter = 1` while the game sends the main-quest number in that slot, so a lookup that
+included `chapter` matched nothing past MQ1 (fixed 2026-09-14, commit `e900210`).
+
+IDs still follow the original 5-wide grid. Deleting the placeholders renumbered nothing,
+so the gaps are expected — **never assume ids are packed end-to-end**:
 
 ```
 id = (main_quest - 1) * 5 + sub_quest
 
-MQ1 →  1   2   3   4  [5]          [ ] = Standby placeholder
-MQ2 →  6   7   8   9  [10]
-MQ3 → 11  12  13  14  [15]
-MQ4 → 16  17  18  19  [20]
-MQ5 → 21  22 [23] [24] [25]
-MQ6 → 26 [27] [28] [29] [30]
-MQ7 → 31 [32] [33] [34] [35]
+        SQ1          SQ2          SQ3          SQ4
+MQ1 →   1 Ch.1–2     2 Ch.3–4     3 Ch.5–6     4 Ch.7–8
+MQ2 →   6 Ch.9–10    7 Ch.11–12   8 Ch.13–14   9 Ch.15–16
+MQ3 →  11 Ch.17–18  12 Ch.19–20  13 Ch.21–22  14 Ch.23–24
+MQ4 →  16 Ch.25–26  17 Ch.27–28  18 Ch.29–30  19 Ch.31–32
+MQ5 →  21 Ch.33–34  22 Ch.35–36
+MQ6 →  26 Ch.37–38
+MQ7 →  31 Ch.39  (final boss)
 ```
 
-Playable sub-quests per main quest: MQ1–MQ4 = 4, MQ5 = 2, MQ6 = 1, MQ7 = 1 (20 total).
-
-The **stride is 5, not the playable count.** A packed offset table
-(`{0,0,4,8,12,16,18,19}`) was previously used in the Unity client and silently wrote
-progress to the wrong row for 16 of 20 sub-quests — two of them onto `Standby` rows.
-Fixed 2026-09-05. Always resolve by `(chapter, main_quest, sub_quest)`, or use the
-formula above.
+The **stride is 5, not the playable count** — the Unity client computes ids with this
+formula (`SubQuestSequenceManager.CalculateQuestID`). A packed offset table was previously
+used there and silently wrote progress to the wrong row (fixed 2026-09-05). `POST /quests`
+sets the id explicitly with this formula and bounds MQ to 1–7 and SQ to 1–5.
 
 ---
 
@@ -327,3 +342,11 @@ inaccuracies. Fixed here:
 
 Columns added 2026-09-05 for FR5/FR6/FR7 (`migrations/quest_metrics.sql`):
 `player_quests.failure_count`, `player_quests.artifacts_found`, `quests.artifacts_total`.
+
+**2026-09-14 — `migrations/quest_chapters.sql`** (runner: `run-quest-chapters.js`):
+- Deleted 15 `quests` rows: 13 `Standby` placeholders + ids 5 and 10 (a 5th sub-quest in
+  MQ1/MQ2 absent from the design and the game, with no dialogue).
+- FK `ON DELETE CASCADE` removed 8 `player_quests` rows (100 → 92). Every one duplicated
+  that player's real SQ4 row, with 0 failures and 0 artifacts.
+- Added `quests.chapter_start`, `quests.chapter_end`, and `UNIQUE uq_mq_sq (main_quest, sub_quest)`.
+- Restore file: `migrations/backups/quest_cleanup_2026-09-14T03-17-36-382Z.sql` (local, not committed).
