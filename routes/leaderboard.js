@@ -2,6 +2,7 @@ const express = require('express');
 const pool = require('../db');
 const verifyToken = require('../src/middleware/auth');
 const { NotFoundError } = require('../src/utils/errors');
+const { onlineSql } = require('../src/utils/presence');
 
 const router = express.Router();
 
@@ -28,7 +29,9 @@ function buildRanking(playerRow, index) {
     chapter:         playerRow.chapter,                 // main-quest number (legacy name)
     bookChapterStart: playerRow.bookChapterStart,       // El Filibusterismo chapters the
     bookChapterEnd:   playerRow.bookChapterEnd,         // player's current sub-quest covers
-    failCount:       playerRow.totalFailures || 0,  // FR6: game-overs, from player_quests
+    // SUM() comes back from the driver as a string ("0"), which broke numeric checks
+    // such as fc === 0 on the web leaderboard. Number() so every client gets numbers.
+    failCount:       Number(playerRow.totalFailures) || 0,  // FR6: game-overs, from player_quests
     suspicion:       playerRow.suspicion || 0,      // current meter, not a fail count
 
     // Aliases for the Unity client. LeaderboardEntry (LeaderboardManager.cs) reads
@@ -38,10 +41,10 @@ function buildRanking(playerRow, index) {
     currentMainQuest: playerRow.current_quest_id,
     suspicionScore:   playerRow.suspicion || 0,
     codexCompletion:  Math.min(100, playerRow.codexCompletion || 0),
-    questsCompleted: playerRow.questsCompleted || 0,
-    artifactsCollected: playerRow.artifactsCollected || 0,   // FR5: artifacts collected
-    artifactsTotal:     playerRow.artifactsTotal || 0,       // ...out of this many
-    isActive:        playerRow.isActive === 1,
+    questsCompleted: Number(playerRow.questsCompleted) || 0,
+    artifactsCollected: Number(playerRow.artifactsCollected) || 0,   // FR5: artifacts collected
+    artifactsTotal:     Number(playerRow.artifactsTotal) || 0,       // ...out of this many
+    isActive:        Number(playerRow.isActive) === 1,   // online now (see src/utils/presence.js)
     createdAt:       playerRow.created_at,
     updatedAt:       playerRow.updated_at,
     status:          playerRow.status
@@ -59,7 +62,7 @@ const BASE_SELECT = `
   p.current_sub_quest,
   p.suspicion,
   p.status,
-  p.is_online        as isActive,
+  ${onlineSql('p')} as isActive,
   p.created_at,
   p.updated_at,
   ROUND(
@@ -240,10 +243,10 @@ router.get('/top/:count', verifyToken, async (req, res, next) => {
       chapter:         p.chapter,
       bookChapterStart: p.bookChapterStart,
       bookChapterEnd:   p.bookChapterEnd,
-      failCount:       p.totalFailures || 0,
+      failCount:       Number(p.totalFailures) || 0,
       suspicion:       p.suspicion || 0,
-      artifactsCollected: p.artifactsCollected || 0,
-      artifactsTotal:     p.artifactsTotal || 0,
+      artifactsCollected: Number(p.artifactsCollected) || 0,
+      artifactsTotal:     Number(p.artifactsTotal) || 0,
       // Aliases the Unity LeaderboardEntry reads -- see buildRanking above.
       currentMainQuest: p.current_quest_id,
       suspicionScore:   p.suspicion || 0,

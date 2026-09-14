@@ -47,11 +47,14 @@ const NORMALIZED_EMAIL_SQL = `
     ELSE LOWER(TRIM(email))
   END`;
 
-/** True when any player already registered with this address (normalized). */
-async function emailHasAccount(pool, email) {
+/**
+ * True when any player already uses this address (normalized). Pass excludePlayerId
+ * when changing an existing player's email, so their own row does not count.
+ */
+async function emailHasAccount(pool, email, excludePlayerId = null) {
   const [rows] = await pool.query(
-    `SELECT id FROM players WHERE ${NORMALIZED_EMAIL_SQL} = ? LIMIT 1`,
-    [normalizeAccountEmail(email)]
+    `SELECT id FROM players WHERE ${NORMALIZED_EMAIL_SQL} = ? AND (? IS NULL OR id <> ?) LIMIT 1`,
+    [normalizeAccountEmail(email), excludePlayerId, excludePlayerId]
   );
   return rows.length > 0;
 }

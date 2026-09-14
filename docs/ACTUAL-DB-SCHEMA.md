@@ -160,6 +160,7 @@ Indexes: **`uq_player_quest` (player_id, quest_id) UNIQUE**, `quest_id`
 | `experience` | int | YES | | 0 |
 | `status` | enum('active','inactive','banned') | YES | idx | `active` |
 | `last_login` | timestamp | YES | | NULL |
+| `last_seen_at` | timestamp | YES | | NULL |
 | `created_at` | timestamp | YES | | CURRENT_TIMESTAMP |
 | `updated_at` | timestamp | YES | | CURRENT_TIMESTAMP on update |
 | `is_online` | tinyint(1) | YES | | 0 |
@@ -194,7 +195,15 @@ Indexes: `uq_username` (unique), `idx_username`, `idx_status`, `idx_level`,
 > `googlemail.com` treated as `gmail.com` (`src/utils/accountEmail.js`). Addresses listed in the
 > `MULTI_ACCOUNT_EMAILS` env var (comma-separated) are exempt, for testing. Suspended and rejected
 > accounts are kept as `status = 'banned'`, so they also block re-registration with that address.
-> Admin-created accounts (`POST /players`) are not checked.
+> Admin-created accounts follow the same rule: `POST /players` returns 409 for an address that
+> already has an account, and `PUT /players/:id` returns 409 when an email is *changed* to one
+> another player uses (resending a player's current email is allowed).
+
+> **Online status is computed, not read from `is_online` alone.** `is_online` is set at login and
+> cleared only by an explicit logout, so closing the app left players "online". Any authenticated
+> player request refreshes `last_seen_at` (at most once a minute, `src/middleware/auth.js`), and the
+> API reports a player as online only while `is_online = 1 AND last_seen_at` is within the last
+> 15 minutes (`src/utils/presence.js`). Stale flags age out on their own; no cleanup job is needed.
 
 **The two suspicion columns, and why there are two:**
 
@@ -373,3 +382,7 @@ Columns added 2026-09-05 for FR5/FR6/FR7 (`migrations/quest_metrics.sql`):
   and `artifacts_total = 1` for each (previously 3 quests had 1, the rest 0; every path was empty).
 - Verified after apply: 0 empty paths, `SUM(artifacts_total)` = 20, 0 rows with `artifacts_found > artifacts_total`.
 - Restore file: `migrations/backups/artifact_data_2026-09-14T04-33-52-907Z.sql` (local, not committed).
+
+**2026-09-14 — `migrations/player_last_seen.sql`** (runner: `run-player-last-seen.js`):
+- Added `players.last_seen_at TIMESTAMP NULL` after `last_login`, backfilled from `last_login` (83 players).
+- Additive only; no restore file needed (`ALTER TABLE players DROP COLUMN last_seen_at` reverts it).

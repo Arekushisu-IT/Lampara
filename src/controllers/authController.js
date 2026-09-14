@@ -186,7 +186,9 @@ const playerLogin = async (req, res, next) => {
     );
 
     // Turn them ONLINE
-    await pool.query('UPDATE players SET last_login = CURRENT_TIMESTAMP, is_online = true WHERE id = ?', [player.id]);
+    await pool.query(
+      'UPDATE players SET last_login = CURRENT_TIMESTAMP, last_seen_at = CURRENT_TIMESTAMP, is_online = true WHERE id = ?',
+      [player.id]);
 
     const metrics = await getCurrentQuestMetrics(player);
 

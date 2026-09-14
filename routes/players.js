@@ -8,6 +8,8 @@ const authorize = require('../src/middleware/authorize');
 const { NotFoundError, ValidationError } = require('../src/utils/errors');
 const { validatePlayerCreate, validatePlayerUpdate, validate } = require('../src/middleware/validation');
 const { artifactNameFromPath } = require('../src/utils/artifacts');
+const { normalizeAccountEmail, isMultiAccountEmail, emailHasAccount } = require('../src/utils/accountEmail');
+const { onlineSql } = require('../src/utils/presence');
 
 const router = express.Router();
 
@@ -16,7 +18,7 @@ router.get('/', verifyToken, authorize('admin', 'staff'), async (req, res, next)
   try {
     const [players] = await pool.query(
       `SELECT p.id, p.name, p.username, p.email, p.birthdate, p.level, p.experience,
-              p.status, p.is_online, p.chapter, p.suspicion, p.current_quest_id,
+              p.status, ${onlineSql('p')} AS is_online, p.chapter, p.suspicion, p.current_quest_id,
               p.current_sub_quest, p.created_at,
               (SELECT cq.chapter_start FROM quests cq WHERE cq.main_quest = p.current_quest_id AND cq.sub_quest = p.current_sub_quest) as book_chapter_start,
               (SELECT cq.chapter_end FROM quests cq WHERE cq.main_quest = p.current_quest_id AND cq.sub_quest = p.current_sub_quest) as book_chapter_end,
@@ -68,6 +70,12 @@ router.post('/', verifyToken, authorize('admin', 'staff'), validatePlayerCreate,
   const { name, username, email, birthdate, level = 1, experience = 0, status = 'active' } = req.body;
 
   try {
+    // Same one-account-per-email rule as self-registration (see src/utils/accountEmail.js),
+    // including the MULTI_ACCOUNT_EMAILS testing exemption.
+    if (email && !isMultiAccountEmail(email) && await emailHasAccount(pool, email)) {
+      return res.status(409).json({ error: 'A player with this email already exists.' });
+    }
+
     // Generate a random password and include it in the response for the admin to share
     const crypto = require('crypto');
     const tempPassword = crypto.randomBytes(6).toString('hex');
@@ -111,6 +119,17 @@ router.put('/:id', verifyToken, authorize('admin', 'staff'), validatePlayerUpdat
       values.push(username);
     }
     if (email !== undefined) {
+      // Changing an email must not give the address a second account (the player's
+      // own row is excluded). Same MULTI_ACCOUNT_EMAILS exemption as registration.
+      // Only checked when the address actually changes, so accounts that predate the
+      // rule can still be edited while the form resends their current email.
+      if (email && !isMultiAccountEmail(email)) {
+        const [[current]] = await pool.query('SELECT email FROM players WHERE id = ?', [id]);
+        const changed = !current || normalizeAccountEmail(current.email || '') !== normalizeAccountEmail(email);
+        if (changed && await emailHasAccount(pool, email, id)) {
+          return res.status(409).json({ error: 'Another player already uses this email.' });
+        }
+      }
       updates.push('email = ?');
       values.push(email);
     }
