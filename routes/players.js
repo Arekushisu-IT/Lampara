@@ -22,6 +22,7 @@ router.get('/', verifyToken, authorize('admin', 'staff'), async (req, res, next)
               (SELECT cq.chapter_end FROM quests cq WHERE cq.main_quest = p.current_quest_id AND cq.sub_quest = p.current_sub_quest) as book_chapter_end,
               (SELECT COUNT(*) FROM player_quests apq JOIN quests aq ON aq.id = apq.quest_id WHERE apq.player_id = p.id AND apq.artifacts_found > 0 AND aq.artifacts_total > 0 AND aq.status = 'active') as artifacts_collected,
               (SELECT COUNT(*) FROM quests aq WHERE aq.status = 'active' AND aq.artifacts_total > 0) as artifacts_total,
+              (SELECT COALESCE(SUM(fpq.failure_count), 0) FROM player_quests fpq WHERE fpq.player_id = p.id) as total_failures,
               COALESCE(ROUND((SELECT COUNT(*) FROM player_quests pq WHERE pq.player_id = p.id AND pq.status = 'completed') * 100.0 / NULLIF((SELECT COUNT(*) FROM quests WHERE status = 'active'), 0), 0), 0) as overall_progress
        FROM players p ORDER BY p.created_at DESC`
     );
@@ -544,7 +545,7 @@ router.get('/:id/progression', verifyToken, async (req, res, next) => {
   try {
     // 1. Fetch the player's basic info
     const [players] = await pool.query(
-      `SELECT p.id, p.name, p.username, p.chapter, p.current_quest_id, p.current_sub_quest, p.suspicion,
+      `SELECT p.id, p.name, p.username, p.status, p.chapter, p.current_quest_id, p.current_sub_quest, p.suspicion,
               (SELECT cq.chapter_start FROM quests cq WHERE cq.main_quest = p.current_quest_id AND cq.sub_quest = p.current_sub_quest) as book_chapter_start,
               (SELECT cq.chapter_end FROM quests cq WHERE cq.main_quest = p.current_quest_id AND cq.sub_quest = p.current_sub_quest) as book_chapter_end
          FROM players p WHERE p.id = ?`,
@@ -645,6 +646,8 @@ router.get('/:id/progression', verifyToken, async (req, res, next) => {
     res.json({
       player_id: player.id,
       player_name: player.name,
+      status: player.status,
+      suspicion: player.suspicion,
       current_chapter: player.chapter,
       current_book_chapter_start: player.book_chapter_start,
       current_book_chapter_end: player.book_chapter_end,
