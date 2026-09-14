@@ -31,3 +31,6 @@ temp/
 
 # Local restore points written by migration runners -- never commit
 migrations/backups/
+
+# Windows / Google Drive folder-settings files
+desktop.ini
