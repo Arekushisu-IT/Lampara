@@ -187,6 +187,15 @@ Indexes: `uq_username` (unique), `idx_username`, `idx_status`, `idx_level`,
 > It is **never** used to look up a quest. The El Filibusterismo book chapters a player is
 > on come from their current quest's `quests.chapter_start` / `chapter_end`.
 
+> **One account per email is enforced at registration, not by the database.** `email` has no
+> UNIQUE key because existing test accounts share addresses (one address has 40 accounts).
+> `POST /auth/player-register` rejects an address that already has an account (409), comparing
+> normalized addresses: lowercased and trimmed, and for Gmail with dots and `+tags` removed and
+> `googlemail.com` treated as `gmail.com` (`src/utils/accountEmail.js`). Addresses listed in the
+> `MULTI_ACCOUNT_EMAILS` env var (comma-separated) are exempt, for testing. Suspended and rejected
+> accounts are kept as `status = 'banned'`, so they also block re-registration with that address.
+> Admin-created accounts (`POST /players`) are not checked.
+
 **The two suspicion columns, and why there are two:**
 
 - `suspicion` — a running **0–100 meter**, not a lifetime total. It rises on a wrong

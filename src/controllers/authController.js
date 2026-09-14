@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const { isMultiAccountEmail, emailHasAccount } = require('../utils/accountEmail');
 const fs = require('fs');
 const path = require('path');
 
@@ -313,6 +314,16 @@ const playerRegister = async (req, res, next) => {
     );
     if (existing.length > 0) {
       return res.status(400).json({ error: 'Username is already registered.' });
+    }
+
+    // One account per email address (per Google account for Gmail -- dots and
+    // +tags are ignored). Addresses in MULTI_ACCOUNT_EMAILS are exempt, for testing.
+    // Suspended and rejected accounts are kept with status 'banned', so they also
+    // block a new registration with the same address.
+    if (!isMultiAccountEmail(email) && await emailHasAccount(pool, email)) {
+      return res.status(409).json({
+        error: 'An account with this email already exists. Log in, or reset your password if you forgot it.'
+      });
     }
 
     const hashedPassword = await bcryptjs.hash(password, 10);
