@@ -460,7 +460,14 @@ router.get('/quest-stats', verifyToken, authorize('admin', 'staff'), async (req,
       ORDER BY game_overs DESC, attempts DESC
     `);
 
-    res.json({ count: stats.length, stats });
+    // Distinct players with at least one attempt, for the dashboard's "attempts · N players".
+    const [[{ players }]] = await pool.query(
+      `SELECT COUNT(DISTINCT pq.player_id) AS players
+         FROM player_quests pq JOIN quests q ON q.id = pq.quest_id
+        WHERE q.status = 'active'`
+    );
+
+    res.json({ count: stats.length, stats, totals: { players: Number(players) || 0 } });
   } catch (err) {
     next(err);
   }
